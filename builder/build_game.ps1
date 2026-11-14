@@ -74,7 +74,7 @@ function Build-Module($name, $exe, $envName, $images, $seeds, $machine, $out) {
 	Say "$name`: compilando ($jobs núcleos, unos minutos)..." "$name`: compiling ($jobs cores, a few minutes)..."
 	Push-Location $builder
 	try {
-		& mingw32-make.exe "-j$jobs" --no-print-directory "MACHINE=$machine" "OUT=../$out"
+		& mingw32-make.exe -f module.mk "-j$jobs" --no-print-directory "MACHINE=$machine" "OUT=../$out"
 		if ($LASTEXITCODE -ne 0) { Clean; Fail "$name`: error de compilación." "$name`: compilation error." }
 	} finally { Pop-Location }
 	Clean   # the generated sources and the RAM images contain code derived from the game
