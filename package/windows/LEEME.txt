@@ -1,0 +1,31 @@
+PLANET HARRIERS - RECOMP (Windows x64 + Vulkan)
+===============================================
+Hecho por Pocket_lucho con Claude.  https://buymeacoffee.com/pocket_lucho
+Codigo fuente y licencia (GPL v2): https://github.com/PocketLucho/Planet-Harriers---Recompilation
+
+Este paquete NO contiene codigo, graficos, sonido ni BIOS del juego.
+
+Primeros pasos
+--------------
+1. Copia tu romset de MAME pharrier.zip (con la BIOS epr-23400a.ic94 dentro) en la carpeta "roms".
+2. Ejecuta CONSTRUIR_JUEGO.bat una vez. Descarga el compilador llvm-mingw (180 MB, solo la primera
+   vez), lee el programa del juego de tu ROM, lo traduce a C y lo compila en ph_game.dll. Tarda
+   unos minutos. Hace falta conexion a internet la primera vez.
+3. Ejecuta PlanetHarriers-Recomp.exe.
+Sin el paso 2 el juego funciona con el interprete (mas lento; lo avisa el titulo de la ventana).
+ph_game.dll sale de TU copia del juego: es para uso personal, no lo distribuyas.
+
+Teclas por defecto (se cambian en F10)
+--------------------------------------
+  5 moneda   1 start
+  Flechas  palanca      Z disparo      X misil (lock-on)      C bomba      A / S cambio de vista
+  F2 test (entra al menu de servicio y confirma)   F1 service (mueve el cursor)
+  P pausa   F10 OPCIONES   F11 pantalla completa   F12 captura   Esc salir
+Mando XInput: stick izquierdo o cruceta = palanca, A/RT disparo, X/B/LT misil, Y bomba,
+  LB/RB cambio de vista, Start start, Back moneda.
+
+Opciones (F10): idioma (automatico / espanol / English), resolucion interna 1x-8x, MSAA,
+panoramico 16:9, pantalla completa, pais (Japon, EE. UU., Exportacion/Europa, Australia, Corea),
+velocidad de la palanca con teclas, invertir arriba/abajo, mando y teclas.
+
+Primera version: quedan fallos graficos por pulir. Estado detallado en docs/STATUS.es.md del repositorio.
