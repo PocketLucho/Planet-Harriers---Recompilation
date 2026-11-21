@@ -58,9 +58,9 @@
 
 ## Pendiente / fallos conocidos
 
-* **Vulkan sin probar en GPU real con este juego.** El entorno de desarrollo sólo tiene el renderizador por
-  software de pruebas; todas las capturas de verificación salen de él. Los binarios de Windows se compilan
-  de forma cruzada y los prueba el usuario. Los shaders se han recompilado con otra versión de glslang.
+* **Vulkan sin probar en GPU real con este juego.** Las capturas de verificación salen de lavapipe (Vulkan por
+  software) y del renderizador por software. Los binarios de Windows se compilan de forma cruzada y los prueba
+  el usuario. SteamOS sin probar en una Deck real (la descarga de Zig del constructor tampoco se ha probado).
 * Capas 2D de 32 bits reducidas a 5 bits por canal (se nota en degradados del HUD y de los logos).
 * El mezclador de fotogramas con una capa 2D como entrada (fundidos de los logos) no está hecho.
 * **Texturas equivocadas en la segunda mitad de la fase 2** (agua y hojas con ruido de colores): el juego
