@@ -1,6 +1,6 @@
 # Estado del proyecto
 
-Última actualización: noviembre de 2026. Primera versión.
+Última actualización: 21 de noviembre de 2026. Segunda versión.
 
 ## Qué funciona
 
@@ -18,6 +18,25 @@
   bomba, cambio de vista, start, moneda, test y service.
 * **País**: Japón / EE. UU. / Exportación / Australia / Corea (byte 5 de la EEPROM del MIE). Con un chip en
   blanco se escriben los ajustes de fábrica antes de que la BIOS lo lea.
+
+## Novedades (noviembre de 2026, segunda versión)
+
+* **Enemigos**: no aparecían porque el registro de longitud de la DMA de texturas (`15000010`) se quedaba a
+  cero tras la transferencia. La interrupción de fin de DMA de la librería del sistema (`@0C01D4F4`) lo suma a
+  su contador de texturas copiadas (GBR+0xB4) y el juego espera a ese contador (`@0C012950`) antes de dar
+  por cargados los modelos de una fase; sin él los generadores de enemigos (`@0C068660`) nunca llamaban a la
+  creación (`@0C068E00`). Ahora el registro se lee sin cambios, como documenta Odin.
+* **Semillas**: 3.184 puntos de entrada nuevos (código de enemigos, jefes y tienda): 31.962 bloques; en una
+  partida de 16.000 fotogramas el intérprete ejecuta menos del 0,01 % de los bloques.
+* **Iluminación**: modelo documentado (ambiente del viewport × material, difusa, especular, emisión, luces
+  direccionales, puntuales y focos con atenuación) y modos de texel; el renderizador por software sigue al de
+  Vulkan.
+* **Menús**: lanzador al iniciar (desactivable) y menú de pausa con pestañas (Partida, Vídeo, Controles,
+  Sistema), dibujados con `ui.c` sobre un lienzo RGBA que Vulkan superpone. Fuentes Orbitron y Rajdhani
+  (SIL OFL) incrustadas; stb_truetype para rasterizar.
+* **SteamOS / Steam Deck**: `PlanetHarriers.sh` (lanzador para añadir a Steam), pantalla completa y 16:9 en
+  modo juego, menú con View+Menu o L3+R3. `build_game.sh` ya no necesita make y, si no hay compilador de C,
+  descarga Zig una vez en `builder/zig`.
 
 ## Cambios respecto al motor de Star Wars Racer
 

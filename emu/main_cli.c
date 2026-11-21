@@ -53,6 +53,7 @@ int main(int argc, char **argv) {
         else if (!strcmp(argv[i], "-stop")) { c.stop_cpu = atoi(argv[++i]); c.stop_pc = strtoul(argv[++i], 0, 16); }
         else if (!strcmp(argv[i], "-test")) { extern long g_test_frames[32]; extern int g_ntest; if (g_ntest < 32) g_test_frames[g_ntest++] = atol(argv[++i]); else i++; }
         else if (!strcmp(argv[i], "-service")) { extern long g_svc_frames[64]; extern int g_nsvc; if (g_nsvc < 64) g_svc_frames[g_nsvc++] = atol(argv[++i]); else i++; }
+        else if (!strcmp(argv[i], "-trace")) { extern u32 g_trace[16]; extern int g_ntrace; if (g_ntrace < 16) g_trace[g_ntrace++] = strtoul(argv[++i], 0, 16) & 0x1fffffff; }
         else if (!strcmp(argv[i], "-watch")) { extern u32 g_watch; g_watch = strtoul(argv[++i], 0, 16); }
         else if (!strcmp(argv[i], "-watchval")) { extern u32 g_watchval; g_watchval = strtoul(argv[++i], 0, 16); }
         else if (!strcmp(argv[i], "-wav")) wavpath = argv[++i];

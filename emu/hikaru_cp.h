@@ -20,15 +20,19 @@ typedef struct {
 
 /* lights (Valkyrie: 051/451 colours, 061 attenuation, 961/B61 direction/position, 104 commit) */
 typedef struct {
-    float dir[3], pos[3], att[2];
-    uint8_t att_type, has_dir, has_pos, has_spec;
+    float dir[3], pos[3], spot[3], att[2];
+    uint8_t att_type, has_dir, has_pos, has_spot, has_cone;
+    uint8_t ambient;               /* 051 bits 16-19: share of the colour given to every polygon, in 1/16 */
     uint16_t diffuse[3];           /* 10-bit, 255 = 1.0 */
-    uint8_t specular[3];
+    float cos_outer, cone_scale;   /* 451: spot cone */
 } CpLight;
 typedef struct { CpLight l[4]; uint8_t mask; } CpLightset;   /* mask bit i = light i disabled */
 
 typedef struct {
+    /* 091 base colour, 291 second colour, 491 specular (rgb in 1/64, exponent), 691 ambient / emission (16 bits a
+       channel, 255 = 1.0). The CP keeps the old names: diffuse = 091, ambient = 291. */
     uint8_t diffuse[3], ambient[3], specular[4];
+    uint16_t amb16[3];
     uint32_t flags881;             /* shading mode, textured, ... */
     uint8_t blend, alpha_test;
 } CpMaterial;

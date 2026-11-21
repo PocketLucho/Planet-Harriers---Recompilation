@@ -148,6 +148,8 @@ uint8_t mie_port_r(Machine *m, uint8_t port, int from_host) {
     switch (port) {
     case 0x00: case 0x01: case 0x02: case 0x03: case 0x04: case 0x05: case 0x06: case 0x07:
         if (port == 1) return (uint8_t)m->mie_irq_pending;
+        if (port == 0) return 0xff;      /* A: DIP switch that is not fitted, reads high (all off). Read as 0 it turned on
+                                            debug options of Planet Harriers: no enemies were placed. */
         if (port == 6) {                                            /* G */
             uint8_t v = 0xff;
             /* the MIE firmware reports bit 3 as TEST and bit 2 as SERVICE (MIE c005 bits 7/6, which the BIOS

@@ -49,3 +49,4 @@ __pycache__/
 # fetched dependencies (third_party/fetch_deps.sh)
 /third_party/Vulkan-Headers/
 /third_party/SDL2/
+/emu/hikaru_vk

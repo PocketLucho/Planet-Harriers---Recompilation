@@ -34,7 +34,9 @@ shaders/overlay_frag.h: shaders/overlay.frag
 	../tools/bin/glslang -V --vn overlay_frag_spv -o $@ $<
 shaders/kept_frag.h: shaders/kept.frag
 	../tools/bin/glslang -V --vn kept_frag_spv -o $@ $<
-vkrender.o: vkrender.c vkrender.h hikaru_gfx.h shaders/kept_frag.h shaders/hikaru_vert.h shaders/hikaru_frag.h shaders/overlay_vert.h shaders/overlay_frag.h
+shaders/ui_frag.h: shaders/ui.frag
+	../tools/bin/glslang -V --vn ui_frag_spv -o $@ $<
+vkrender.o: vkrender.c vkrender.h hikaru_gfx.h shaders/kept_frag.h shaders/ui_frag.h shaders/hikaru_vert.h shaders/hikaru_frag.h shaders/overlay_vert.h shaders/overlay_frag.h
 	$(CC) $(CFLAGS) $(VKINC) -c $<
 volk.o: ../third_party/volk/volk.c
 	$(CC) -O2 $(VKINC) -c $< -o $@
@@ -53,7 +55,13 @@ miniz.o: ../third_party/miniz/miniz.c
 SDLINC=-I../third_party/SDL2/include
 osd.o: osd.c osd.h font8x16.h
 	$(CC) $(CFLAGS) -c $<
-main_sdl.o: main_sdl.c $(HDRS) vkrender.h osd.h
+ui.o: ui.c ui.h third_party/fonts_embed.h third_party/stb_truetype.h font8x16.h
+	$(CC) $(CFLAGS) -c $<
+main_sdl.o: main_sdl.c $(HDRS) vkrender.h osd.h ui.h
 	$(CC) $(CFLAGS) $(VKINC) $(SDLINC) -c main_sdl.c -o $@
-pharrier: $(filter-out main_cli.o,$(CORE)) main_sdl.o osd.o $(VKOBJS) blk_stub.o
+pharrier: $(filter-out main_cli.o,$(CORE)) main_sdl.o osd.o ui.o $(VKOBJS) blk_stub.o
 	$(CC) -o $@ $^ -lm -lz -ldl -l:libSDL2-2.0.so.0 -Wl,-rpath,'$$ORIGIN/lib'
+
+# headless runner with the Vulkan renderer (VKLIST / VKDUMP write vkframes/v_<frame>.png); loads -module like hikaru_run
+hikaru_vk: $(filter-out main_cli.o,$(CORE)) main_vk.o $(VKOBJS) blk_stub.o
+	$(CC) -o $@ $^ -lm -lz -ldl

@@ -1,6 +1,7 @@
 /* Windows frontend: Win32 window + Vulkan swapchain, 60 Hz pacing, keyboard input.
  * Usage: PlanetHarriers-Recomp.exe [path\to\pharrier.zip]   (default: pharrier.zip next to the exe or in roms\)
- * Keys are configurable (F10 = settings window, saved in pharrier.ini). Defaults: 5 coin, 1 start,
+ * Launcher at start (can be turned off); Esc / F10 or Back+Start on the gamepad open the menu; F9 = key bindings window.
+ * Keys are configurable (saved in pharrier.ini). Defaults: 5 coin, 1 start,
  *       arrows = stick, Z shot, X missile, C bomb, A/S view change, F2 test, F1 service, P pause;
  *       F11 fullscreen, Esc quit. XInput gamepad: left stick, A/RT shot, X/B/LT missile, Y bomb, LB/RB view, Back coin.
  * Env: PH_SCALE (overrides the internal resolution), PH_LOG (write hikaru.log), PH_NOSOUND. */
@@ -17,11 +18,17 @@
 #include "settings_win32.h"
 #include "ph_input.h"
 #include "swrender.h"
+#include "ui.h"
+#ifndef PH_VERSION
+#define PH_VERSION "0.5"
+#endif
 #include <wchar.h>
 
 int gfx_vk_start(const VkrConfig *cfg);
+void gfx_vk_redraw(const uint16_t *lay, uint32_t ena, uint32_t direct);
 
-static HWND hwnd; static int running = 1, fullscreen, want_settings, want_shot, paused;
+static HWND hwnd; static int running = 1, fullscreen, want_settings, want_shot, paused, want_menu, want_restart, restart_launcher;
+static int ui_q[32], ui_qn;   /* menu keys from the window procedure */
 static char status_msg[256]; static double status_until;
 
 /* ---- audio: waveOut fed from the emulator ring (44.1 kHz stereo, 1024-sample blocks) ---- */
@@ -94,10 +101,20 @@ static LRESULT CALLBACK wndproc(HWND h, UINT m, WPARAM w, LPARAM l) {
     case WM_CLOSE: running = 0; return 0;
     case WM_SIZE: vkr_resize(LOWORD(l), HIWORD(l)); return 0;
     case WM_KEYDOWN: case WM_SYSKEYDOWN:
-        if (w == VK_ESCAPE) running = 0;
+        if (ui_is_open()) {
+            int k = -1, shift = GetKeyState(VK_SHIFT) < 0;
+            switch (w) { case VK_UP: k = UI_KEY_UP; break; case VK_DOWN: k = UI_KEY_DOWN; break; case VK_LEFT: k = UI_KEY_LEFT; break;
+                         case VK_RIGHT: k = UI_KEY_RIGHT; break; case VK_RETURN: case VK_SPACE: k = UI_KEY_OK; break;
+                         case VK_ESCAPE: case VK_BACK: case VK_F10: k = UI_KEY_BACK; break; case VK_TAB: k = shift ? UI_KEY_PREV : UI_KEY_NEXT; break;
+                         case VK_PRIOR: case 'Q': k = UI_KEY_PREV; break; case VK_NEXT: case 'E': k = UI_KEY_NEXT; break; }
+            if (k >= 0 && ui_qn < 32) ui_q[ui_qn++] = k;
+            if (w == VK_F11 && !(l & 0x40000000)) toggle_fullscreen_saved();
+            return 0;
+        }
+        if ((w == VK_ESCAPE || w == VK_F10) && !(l & 0x40000000)) want_menu = 1;
+        if (w == VK_F9 && !(l & 0x40000000)) want_settings = 1;
         if (w == VK_F11 && !(l & 0x40000000)) toggle_fullscreen_saved();
         if ((int)w == g_set.keys[ACT_PAUSE] && !(l & 0x40000000)) paused = !paused;
-        if (w == VK_F10 && !(l & 0x40000000)) want_settings = 1;
         if (w == VK_F12 && !(l & 0x40000000)) want_shot = 1;
         if ((int)w == g_set.keys[ACT_COIN] && !(l & 0x40000000)) g_input.coins[0]++;
         if (w < 256) keys[w] = 1;
@@ -126,9 +143,10 @@ static void update_input(void) {
         if (p.buttons & 0x0100) p1 |= PH_BTN_VR_L;                             /* LB / RB: view change */
         if (p.buttons & 0x0200) p1 |= PH_BTN_VR_R;
         if (p.buttons & 0x0010) p1 |= PH_BTN_START;                            /* Start */
-        static int back_prev; int back = (p.buttons & 0x0020) != 0;
-        if (back && !back_prev) g_input.coins[0]++;                            /* Back: coin */
-        back_prev = back;
+        static int back_prev, start_prev; int back = (p.buttons & 0x0020) != 0, start = (p.buttons & 0x0010) != 0;
+        if ((back && start && !(back_prev && start_prev)) || ((p.buttons & 0x00c0) == 0x00c0)) want_menu = 1;   /* Back+Start or L3+R3: menu */
+        else if (back && !back_prev && !start) g_input.coins[0]++;            /* Back: coin */
+        back_prev = back; start_prev = start;
     }
     ph_stick_update(&stick, kx, ky, px, py, g_set.stick_speed, g_set.invert_y);
     if (K(ACT_START))   p1 |= PH_BTN_START;
@@ -174,6 +192,59 @@ static void save_screenshot(void) {
     free(rgba);
 }
 
+/* ---- menus (ui.c) ---- */
+static UiOptions uo; static UiInfo ui_info; static char rom_name[128], gpu_name[128];
+static const char *bind_es[10] = { "Disparo", "Misil", "Bomba", "Vista izquierda", "Vista derecha", "Moneda", "Start", "Test", "Servicio", "Pausa" };
+static const char *bind_en[10] = { "Shot", "Missile", "Bomb", "View left", "View right", "Coin", "Start", "Test", "Service", "Pause" };
+static const int bind_id[10] = { ACT_SHOT, ACT_MISSILE, ACT_BOMB, ACT_VR_L, ACT_VR_R, ACT_COIN, ACT_START, ACT_TEST, ACT_SERVICE, ACT_PAUSE };
+static void key_name(int vk, char *out, int n) {
+    UINT sc = MapVirtualKeyA(vk, MAPVK_VK_TO_VSC); LONG lp = (LONG)(sc << 16);
+    if (vk == VK_LEFT || vk == VK_RIGHT || vk == VK_UP || vk == VK_DOWN || vk == VK_PRIOR || vk == VK_NEXT || vk == VK_INSERT || vk == VK_DELETE || vk == VK_HOME || vk == VK_END) lp |= 1 << 24;
+    if (!GetKeyNameTextA(lp, out, n)) snprintf(out, n, "0x%02X", vk);
+}
+static void ui_show(int screen) {
+    uo.scale = g_set.scale; uo.wide = g_set.wide; uo.msaa = g_set.msaa; uo.fullscreen = fullscreen; uo.stick_speed = g_set.stick_speed;
+    uo.pad_mode = g_set.pad_mode; uo.invert_y = g_set.invert_y; uo.lang = g_set.lang; uo.region = emu_region(); uo.show_launcher = g_set.launcher;
+    ui_info.version = PH_VERSION; ui_info.platform = "Windows"; ui_info.rom = rom_name; ui_info.lang_en = ph_lang_en;
+    snprintf(gpu_name, sizeof gpu_name, "%s", vkr_device_name()); ui_info.gpu = gpu_name;
+    ui_info.blocks = emu_block_count(); ui_info.msaa_gpu = vkr_msaa();
+    XPad p; ui_info.pad_name = pad_read(&p) ? "XInput" : 0;
+    static char kn[10][32]; ui_info.nbind = 10;
+    for (int i = 0; i < 10; i++) { ui_info.bind_act[i] = (ph_lang_en() ? bind_en : bind_es)[i]; key_name(g_set.keys[bind_id[i]], kn[i], 32); ui_info.bind_key[i] = kn[i]; }
+    ui_qn = 0; ui_open(screen, &uo, &ui_info);
+}
+static void ui_apply(int r) {
+    g_set.stick_speed = uo.stick_speed; g_set.pad_mode = uo.pad_mode; g_set.invert_y = uo.invert_y; g_set.lang = uo.lang; g_set.launcher = uo.show_launcher;
+    if (r == UI_VIDEO) { g_set.scale = uo.scale; g_set.wide = uo.wide; g_set.msaa = uo.msaa; vkr_reconfigure(g_set.scale, g_set.wide, g_set.msaa); ui_info.msaa_gpu = vkr_msaa(); }
+    if (r == UI_FULLSCREEN && !!uo.fullscreen != !!fullscreen) toggle_fullscreen();
+    g_set.fullscreen = fullscreen;
+    if (uo.region != emu_region()) { emu_set_region(uo.region); g_set.region = uo.region; }
+    settings_save();
+}
+/* gamepad in the menus: d-pad / stick, A, B, LB/RB, with repeat */
+static void ui_pad_poll(void) {
+    XPad p; if (!pad_read(&p)) return;
+    static WORD prev; static int prev_dir[2]; static DWORD rep_t;
+    WORD b = p.buttons, down = b & ~prev; prev = b;
+    int dy = (b & 1) || p.ly > 20000 ? -1 : (b & 2) || p.ly < -20000 ? 1 : 0, dx = (b & 4) || p.lx < -20000 ? -1 : (b & 8) || p.lx > 20000 ? 1 : 0;
+    DWORD now = GetTickCount();
+    if (dy != prev_dir[0] || (dy && now - rep_t > 180)) { if (dy) { ui_q[ui_qn++] = dy < 0 ? UI_KEY_UP : UI_KEY_DOWN; rep_t = now + (dy != prev_dir[0] ? 220 : 0); } prev_dir[0] = dy; }
+    if (dx != prev_dir[1]) { if (dx) ui_q[ui_qn++] = dx < 0 ? UI_KEY_LEFT : UI_KEY_RIGHT; prev_dir[1] = dx; }
+    if (down & 0x1000) ui_q[ui_qn++] = UI_KEY_OK;
+    if (down & (0x2000 | 0x0010)) ui_q[ui_qn++] = UI_KEY_BACK;
+    if (down & 0x0100) ui_q[ui_qn++] = UI_KEY_PREV;
+    if (down & 0x0200) ui_q[ui_qn++] = UI_KEY_NEXT;
+    if (ui_qn > 28) ui_qn = 28;
+}
+static void ui_draw(double t) {
+    static uint32_t *canvas; int w, h; vkr_ui_canvas(&w, &h);
+    if (!canvas) canvas = malloc(1280 * 720 * 4);
+    ui_render(canvas, w, h, t); vkr_ui_upload(canvas, w, h);
+    static uint16_t lay[640 * 960];
+    if (ui_screen() == UI_SCREEN_LAUNCHER) gfx_vk_redraw(lay, 0, 0);
+    else { uint32_t ena = (uint32_t)gpu_layers(lay), dir = (uint32_t)gpu_layers_direct(); gfx_vk_redraw(lay, ena, dir); }
+}
+
 static const char *find_rom(const char *arg) {
     static char path[MAX_PATH];
     if (arg && *arg) return arg;
@@ -190,7 +261,13 @@ static const char *find_rom(const char *arg) {
 int WINAPI WinMain(HINSTANCE hi, HINSTANCE hp, LPSTR cmd, int show) {
     (void)hp;
     char arg[MAX_PATH] = { 0 };
-    if (cmd && *cmd) { snprintf(arg, sizeof arg, "%s", cmd); size_t n = strlen(arg); if (n && arg[0] == '"') { memmove(arg, arg + 1, n); n--; if (n && arg[n - 1] == '"') arg[n - 1] = 0; } }
+    if (cmd && *cmd) {
+        snprintf(arg, sizeof arg, "%s", cmd);
+        char *f; if ((f = strstr(arg, "--no-launcher"))) { restart_launcher = -1; memset(f, ' ', 13); } else if ((f = strstr(arg, "--launcher"))) { restart_launcher = 1; memset(f, ' ', 10); }
+        size_t n = strlen(arg); while (n && arg[n - 1] == ' ') arg[--n] = 0;
+        while (arg[0] == ' ') memmove(arg, arg + 1, n--);
+        if (n && arg[0] == '"') { memmove(arg, arg + 1, n); n--; if (n && arg[n - 1] == '"') arg[n - 1] = 0; }
+    }
     const char *rom = find_rom(arg);
     if (!rom) {
         settings_load();
@@ -231,6 +308,8 @@ int WINAPI WinMain(HINSTANCE hi, HINSTANCE hp, LPSTR cmd, int show) {
     }
     { RECT cr; GetClientRect(hwnd, &cr); vkr_resize(cr.right, cr.bottom); }
     if (g_set.fullscreen) toggle_fullscreen();
+    { const char *b = strrchr(rom, '\\'); if (!b) b = strrchr(rom, '/'); snprintf(rom_name, sizeof rom_name, "%s", b ? b + 1 : rom); }
+    if (restart_launcher > 0 || (g_set.launcher && restart_launcher == 0)) ui_show(UI_SCREEN_LAUNCHER);
 
     LARGE_INTEGER freq, t0, now; QueryPerformanceFrequency(&freq); QueryPerformanceCounter(&t0);
     timeBeginPeriod(1);
@@ -239,6 +318,33 @@ int WINAPI WinMain(HINSTANCE hi, HINSTANCE hp, LPSTR cmd, int show) {
     while (running) {
         MSG msg;
         while (PeekMessage(&msg, 0, 0, 0, PM_REMOVE)) { TranslateMessage(&msg); DispatchMessage(&msg); }
+        if (want_menu && !ui_is_open()) { want_menu = 0; ui_show(UI_SCREEN_PAUSE); }
+        if (ui_is_open()) {
+            if (audio_on) waveOutPause(wo);
+            ui_pad_poll();
+            for (int i = 0; i < ui_qn && ui_is_open(); i++) {
+                int r = ui_key(ui_q[i]);
+                switch (r) {
+                case UI_NONE: case UI_START: case UI_RESUME: break;
+                case UI_QUIT: running = 0; break;
+                case UI_SCREENSHOT: want_shot = 2; break;
+                case UI_RESET: want_restart = 1; restart_launcher = -1; running = 0; break;
+                case UI_LAUNCHER: want_restart = 1; restart_launcher = 1; running = 0; break;
+                case UI_REGION: ui_apply(r); want_restart = 1; restart_launcher = -1; running = 0; break;
+                default: ui_apply(r); break;
+                }
+            }
+            ui_qn = 0;
+            if (!ui_is_open() || !running) {
+                vkr_ui_upload(0, 0, 0); memset(keys, 0, sizeof keys); want_menu = 0;
+                if (audio_on) waveOutRestart(wo);
+                QueryPerformanceCounter(&now); next = (double)(now.QuadPart - t0.QuadPart) / freq.QuadPart; aud_r = g_aud_w;
+                continue;
+            }
+            QueryPerformanceCounter(&now); ui_draw((double)(now.QuadPart - t0.QuadPart) / freq.QuadPart);
+            Sleep(15);
+            continue;
+        }
         if (want_settings) {                         /* F10: game paused while the window is open */
             want_settings = 0;
             if (audio_on) waveOutPause(wo);
@@ -272,7 +378,8 @@ int WINAPI WinMain(HINSTANCE hi, HINSTANCE hp, LPSTR cmd, int show) {
             QueryPerformanceCounter(&now); next = (double)(now.QuadPart - t0.QuadPart) / freq.QuadPart; aud_r = g_aud_w;
         }
         update_input();
-        if (want_shot) { want_shot = 0; vkr_request_screenshot(); }
+        if (want_shot == 1) { want_shot = 0; vkr_request_screenshot(); }
+        if (want_shot == 2) want_shot = 1;           /* from the menu: next frame, without the menu on it */
         if (emu_run_frame() < 0) break;
         if (vkr_screenshot_ready()) save_screenshot();
         audio_pump();
@@ -288,10 +395,10 @@ int WINAPI WinMain(HINSTANCE hi, HINSTANCE hp, LPSTR cmd, int show) {
         if (t - fps_t >= 1.0 || (status_msg[0] && status_until == t + 4.0)) {
             char title[512];
             if (status_msg[0]) snprintf(title, sizeof title, "Planet Harriers - Recomp   [%ld fps]   %s", fps_n, status_msg);
-            else if (emu_block_count() > 0) snprintf(title, sizeof title, T2("Planet Harriers - Recomp   [%ld fps, %s, %d bloques recompilados]   F10: opciones  F12: captura",
-                                                             "Planet Harriers - Recomp   [%ld fps, %s, %d recompiled blocks]   F10: options  F12: screenshot"), fps_n, vkr_device_name(), emu_block_count());
-            else snprintf(title, sizeof title, T2("Planet Harriers - Recomp   [%ld fps, %s, intérprete: ejecuta CONSTRUIR_JUEGO.bat]   F10: opciones",
-                                                  "Planet Harriers - Recomp   [%ld fps, %s, interpreter: run BUILD_GAME.bat]   F10: options"), fps_n, vkr_device_name());
+            else if (emu_block_count() > 0) snprintf(title, sizeof title, T2("Planet Harriers - Recomp   [%ld fps, %s, %d bloques recompilados]   Esc: menú  F12: captura",
+                                                             "Planet Harriers - Recomp   [%ld fps, %s, %d recompiled blocks]   Esc: menu  F12: screenshot"), fps_n, vkr_device_name(), emu_block_count());
+            else snprintf(title, sizeof title, T2("Planet Harriers - Recomp   [%ld fps, %s, intérprete: ejecuta CONSTRUIR_JUEGO.bat]   Esc: menú",
+                                                  "Planet Harriers - Recomp   [%ld fps, %s, interpreter: run BUILD_GAME.bat]   Esc: menu"), fps_n, vkr_device_name());
             wchar_t wt[512]; MultiByteToWideChar(CP_UTF8, 0, title, -1, wt, 512); SetWindowTextW(hwnd, wt);
             if (t - fps_t >= 1.0) { fps_t = t; fps_n = 0; }
         }
@@ -300,5 +407,11 @@ int WINAPI WinMain(HINSTANCE hi, HINSTANCE hp, LPSTR cmd, int show) {
     nv_save();
     if (audio_on) { waveOutReset(wo); for (int i = 0; i < AB_N; i++) waveOutUnprepareHeader(wo, &whdr[i], sizeof whdr[i]); waveOutClose(wo); }
     vkr_shutdown();
+    if (want_restart) {   /* reset, back to the launcher or country changed: start again */
+        wchar_t exe[MAX_PATH], cl[MAX_PATH * 2 + 64]; GetModuleFileNameW(0, exe, MAX_PATH);
+        swprintf(cl, MAX_PATH * 2 + 64, L"\"%ls\" %ls\"%hs\"", exe, restart_launcher > 0 ? L"--launcher " : L"--no-launcher ", rom);
+        STARTUPINFOW si = { sizeof si }; PROCESS_INFORMATION pi;
+        if (CreateProcessW(exe, cl, 0, 0, FALSE, 0, 0, 0, &si, &pi)) { CloseHandle(pi.hThread); CloseHandle(pi.hProcess); }
+    }
     return 0;
 }

@@ -11,7 +11,7 @@ static void reserve(GfxFrame *f, int n) {
     if (f->nv + n > f->cap) { f->cap = (f->nv + n) * 2 + 1024; f->v = realloc(f->v, f->cap * sizeof(GfxVertex)); }
 }
 
-static void make_vertex(GfxVertex *o, const CpTri *t, const CpVert *v, const uint8_t col[4], const uint8_t fog[4], uint32_t texw) {
+static void make_vertex(GfxVertex *o, const CpTri *t, const CpVert *v, const GfxShade *sh, uint32_t texw) {
     const CpViewport *vp = &t->view;
     float w = -v->pos[2];
     float sx = vp->off_x + v->pos[0] * vp->f / (w != 0 ? w : 1e-6f);
@@ -26,20 +26,24 @@ static void make_vertex(GfxVertex *o, const CpTri *t, const CpVert *v, const uin
     {   /* 2C1 bit 14: texcoords in whole texels instead of 1/16 (Tatooine ground; verified against the arcade video) */
         float sc = (t->tex.w2c1 & 0x4000) ? 16.0f : 1.0f;
         o->uv[0] = v->uv[0] * sc; o->uv[1] = v->uv[1] * sc; }
-    memcpy(o->color, col, 4); memcpy(o->fog, fog, 4);
+    memcpy(o->light, sh->light, sizeof o->light); memcpy(o->spec, sh->spec, sizeof o->spec);
+    memcpy(o->base, sh->base, 4); memcpy(o->col1, sh->col1, 4); memcpy(o->fog, sh->fog, 4);
     const CpTexhead *th = &t->tex;
     int bx = 0, by = 0;
     if (th->slotx >= 0x80 && th->sloty >= 0xc0) { bx = (th->slotx - 0x80) * 16; by = (th->sloty - 0xc0) * 16; }
     o->tex[0] = texw;
     o->tex[1] = (uint32_t)bx | ((uint32_t)by << 16);
     o->tex[2] = (uint32_t)th->logw | ((uint32_t)th->logh << 8);
-    o->tex[3] = 0;
+    o->tex[3] = sh->modes;
 }
 
-/* Hikaru lighting (model from Valkyrie's renderer): lit materials (881 shading mode != 0 with a lightset that
- * is not fully masked): colour = viewport ambient (011) * material ambient + sum over the enabled lights of
- * att * max(N.L, 0) * material diffuse * light diffuse; lights are given in eye space. Unlit: material ambient.
- * Fog (621, per viewport) on materials with the 881 depth-blend bit: linear from start to end (see below). */
+/* Hikaru lighting. Per vertex (Gouraud); the model is the one documented for the board (Odin's notes, X360 port):
+ *   lit = (viewport ambient 011 x 691 [shading mode 1] + 691 emission [mode 2] + sum of the lights) x base + specular
+ *   light i: attenuation x (max(N.L, 0) + ambient share 051/16) x colour (10 bits, 255 = 1.0)
+ *   specular (not in mode 3): attenuation x (R.V)^exponent x light colour x 491 colour / 64
+ * base is the texel and / or the 091 / 291 colours, as the texel mode (2C1 bits 29-31) and the alpha mode (881 bit 20)
+ * say; it is combined in the fragment shader. Lit only when the material has a shading mode and the lightset is not
+ * fully masked. Lights are in eye space. Fog (621) on materials with the 881 depth-blend bit: linear on the eye depth. */
 static float clamp01(float x) { return x < 0 ? 0 : x > 1 ? 1 : x; }
 #if defined(__SSE__) || defined(__x86_64__) || defined(_M_X64)
 #include <xmmintrin.h>
@@ -52,8 +56,9 @@ static inline float rsqrt_fast(float x) { return 1.0f / sqrtf(x); }
 #endif
 static void norm3(float v[3]) { float l2 = v[0] * v[0] + v[1] * v[1] + v[2] * v[2]; if (l2 > 1e-24f) { float r = rsqrt_fast(l2); v[0] *= r; v[1] *= r; v[2] *= r; } }
 
-/* per-frame lightset cache: light vectors normalised / classified once per frame instead of per vertex */
-typedef struct { float L[3], pos[3], col[3], att0, att1; uint8_t point, infinite, att_type; } GfxLight;
+/* per-frame lightset cache: light vectors classified once per frame instead of per vertex */
+enum { LT_DIR, LT_POINT, LT_SPOT, LT_UNDIRECTED };
+typedef struct { float L[3], dlen, pos[3], axis[3], col[3], amb, att0, att1, cos_outer, cone_scale; uint8_t type, att_type; } GfxLight;
 typedef struct { int n; GfxLight l[4]; } GfxLs;
 static GfxLs *ls_cache; static int ls_cap; static const CpState *ls_owner; static uint32_t ls_gen; static int ls_n = -1;
 static void prepare_lights(const CpState *s) {
@@ -64,68 +69,89 @@ static void prepare_lights(const CpState *s) {
         if (ls->mask == 0xf) continue;
         for (int li = 0; li < 4; li++) {
             const CpLight *l = &ls->l[li];
-            if ((ls->mask & (1 << li)) || !(l->has_pos || l->has_dir)) continue;
+            if (ls->mask & (1 << li)) continue;
             GfxLight *g = &o->l[o->n++];
-            g->point = l->has_pos; memcpy(g->pos, l->pos, sizeof g->pos); memcpy(g->L, l->dir, sizeof g->L); norm3(g->L);
-            g->infinite = l->att_type == 0 && l->att[0] == 1.0f && l->att[1] == 1.0f;
-            g->att_type = l->att_type; g->att0 = l->att[0]; g->att1 = l->att[1];
+            /* attenuation type 0 with both parameters 1: none */
+            int none = l->att_type == 0 && l->att[0] == 1.0f && l->att[1] == 1.0f;
+            g->att_type = none ? 4 : l->att_type; g->att0 = l->att[0]; g->att1 = l->att[1];
+            if (none) g->type = (l->has_dir && !l->dir[0] && !l->dir[1] && !l->dir[2]) || (!l->has_dir && !l->has_pos) ? LT_UNDIRECTED : LT_DIR;
+            else if (l->has_pos && l->has_spot && l->has_cone) g->type = LT_SPOT;
+            else if (l->has_pos) g->type = LT_POINT;
+            else g->type = LT_DIR;
+            memcpy(g->pos, l->pos, sizeof g->pos); memcpy(g->L, l->dir, sizeof g->L);
+            g->dlen = sqrtf(g->L[0] * g->L[0] + g->L[1] * g->L[1] + g->L[2] * g->L[2]); norm3(g->L);
+            for (int k = 0; k < 3; k++) g->axis[k] = -l->spot[k];
+            norm3(g->axis);
+            g->cos_outer = l->cos_outer; g->cone_scale = l->cone_scale;
+            g->amb = (float)l->ambient * (1.0f / 16.0f);
             for (int k = 0; k < 3; k++) g->col[k] = l->diffuse[k] / 255.0f;
         }
     }
     ls_owner = s; ls_gen = s->gen; ls_n = s->nls;
 }
 
-void gfx_vertex_shade(const CpState *s, const CpTri *t, int k, const float face_n[3], uint8_t col[4], uint8_t fog[4]) {
+static const uint8_t texel_modes[8] = { 0, 1, 2, 0, 3, 4, 0, 0 };
+
+void gfx_vertex_shade(const CpState *s, const CpTri *t, int k, const float face_n[3], GfxShade *o) {
     const CpMaterial *m = &t->mat; const CpViewport *vp = &t->view; const CpVert *v = &t->v[k];
-    int textured = (m->flags881 >> 3) & 1, mode = m->flags881 & 3, translucent = t->polytype == 0xd || t->polytype == 0xb;
+    int textured = (m->flags881 >> 3) & 1, mode = m->flags881 & 3, alpha_mode = (m->flags881 >> 4) & 1;
     prepare_lights(s);
     const GfxLs *ls = (t->ls >= 0 && t->ls < s->nls) ? &ls_cache[t->ls] : 0;
-    float md[3], ma[3], c[3];
-    /* 091/291 roles: the game sets 091=0, 291=FF on the Tatooine sand (lit by the sun, not by ambient), so 091 is
-     * taken as the ambient coefficient and 291 as the diffuse one (Valkyrie has them the other way round).
-     * Viewport ambient (011, 16-bit) scaled /512: matches the arcade video in the hangar and the race.
-     * Both are visual fits; PH_MATSWAP=0 / PH_AMBDIV=<n> override them. */
-    static int swp = -1; if (swp < 0) swp = getenv("PH_MATSWAP") ? atoi(getenv("PH_MATSWAP")) != 0 : 1;
-    const uint8_t *D = swp ? m->ambient : m->diffuse, *A = swp ? m->diffuse : m->ambient;
-    for (int i = 0; i < 3; i++) { md[i] = D[i] * (1.0f / 255.0f); ma[i] = A[i] * (1.0f / 255.0f); }
-    int has_a = A[0] | A[1] | A[2], has_d = D[0] | D[1] | D[2];
-    /* both colours 0: a textured mesh shows its texels (Odin: texture mode 0 takes the texel as the base colour);
-       an untextured one is really black (the letterbox bars of the RETIRED / FINISHED screens; 0.8 grey before) */
-    if (!has_a) { if (has_d) memcpy(ma, md, sizeof ma); else ma[0] = ma[1] = ma[2] = textured ? 1.0f : 0.0f; }
-    if (mode && ls && ls->n) {
-        float n[3];
-        if (mode == 2 || (v->nrm[0] == 0 && v->nrm[1] == 0 && v->nrm[2] == 0)) memcpy(n, face_n, sizeof n);   /* flat / no normal */
+    int lit = mode && ls && ls->n;
+    memcpy(o->base, m->diffuse, 3); o->base[3] = 255;
+    memcpy(o->col1, m->ambient, 3); o->col1[3] = 255;
+    o->modes = (textured ? texel_modes[(t->tex.w2c1 >> 29) & 7] : 0) | ((uint32_t)alpha_mode << 3) | ((uint32_t)lit << 4);
+    o->light[3] = clamp01(t->polyalpha * (v->alpha / 255.0f));
+    o->spec[0] = o->spec[1] = o->spec[2] = o->spec[3] = 0;
+    if (!lit) { o->light[0] = o->light[1] = o->light[2] = 1.0f; }
+    else {
+        float n[3], c[3] = { 0, 0, 0 }, sp[3] = { 0, 0, 0 };
+        if (mode == 2 && !v->nrm[0] && !v->nrm[1] && !v->nrm[2]) memcpy(n, face_n, sizeof n);
+        else if (!v->nrm[0] && !v->nrm[1] && !v->nrm[2]) memcpy(n, face_n, sizeof n);
         else memcpy(n, v->nrm, sizeof n);
         norm3(n);
-        static float amb_div = -1; if (amb_div < 0) amb_div = getenv("PH_AMBDIV") ? (float)atof(getenv("PH_AMBDIV")) : 512.0f;
-        for (int i = 0; i < 3; i++) c[i] = clamp01(vp->ambient[i] / amb_div) * ma[i];
-        if (has_d && (c[0] < 1 || c[1] < 1 || c[2] < 1))
+        for (int i = 0; i < 3; i++) {
+            float a16 = m->amb16[i] / 255.0f;
+            if (mode == 1) c[i] += vp->ambient[i] / 255.0f * a16;
+            else if (mode == 2) c[i] += a16;
+        }
+        float V[3] = { -v->pos[0], -v->pos[1], -v->pos[2] }; norm3(V);
+        float sexp = (float)m->specular[3];
+        int want_spec = mode != 3 && (m->specular[0] | m->specular[1] | m->specular[2]);
         for (int li = 0; li < ls->n; li++) {
             const GfxLight *l = &ls->l[li];
-            float L[3], d = 0.001f, att = 1;
-            if (l->point) { for (int i = 0; i < 3; i++) L[i] = l->pos[i] - v->pos[i]; float l2 = L[0] * L[0] + L[1] * L[1] + L[2] * L[2];
-                            if (l2 > 1e-24f) { float id = rsqrt_fast(l2); d = l2 * id; L[0] *= id; L[1] *= id; L[2] *= id; } }
-            else memcpy(L, l->L, sizeof L);
-            float ndl = n[0] * L[0] + n[1] * L[1] + n[2] * L[2];
-            if (ndl <= 0) continue;
-            if (!l->infinite) {
-                float dd = l->att_type == 1 ? d * d : l->att_type == 2 ? 1.0f / d : l->att_type == 3 ? 1.0f / (d * d) : d;
-                att = clamp01(l->att0 * (l->att1 + dd));
+            if (l->type == LT_UNDIRECTED) { for (int i = 0; i < 3; i++) c[i] += l->col[i]; continue; }
+            float L[3], d;
+            if (l->type == LT_DIR) { memcpy(L, l->L, sizeof L); d = l->dlen; }
+            else { for (int i = 0; i < 3; i++) L[i] = l->pos[i] - v->pos[i];
+                   float l2 = L[0] * L[0] + L[1] * L[1] + L[2] * L[2]; d = sqrtf(l2); if (d > 1e-12f) { L[0] /= d; L[1] /= d; L[2] /= d; } }
+            float att = 1.0f;
+            switch (l->att_type) {
+            case 0: att = clamp01(l->att0 * (d + l->att1)); break;
+            case 1: att = clamp01(l->att0 * (d * d + l->att1)); break;
+            case 2: att = clamp01(l->att0 * (1.0f / (d > 1e-12f ? d : 1e-12f) + l->att1)); break;
+            case 3: att = clamp01(l->att0 * (1.0f / (d * d > 1e-24f ? d * d : 1e-24f) + l->att1)); break;
             }
-            float k2 = att * ndl;
-            for (int i = 0; i < 3; i++) c[i] += k2 * md[i] * l->col[i];
+            if (l->type == LT_SPOT) att *= clamp01((L[0] * l->axis[0] + L[1] * l->axis[1] + L[2] * l->axis[2] - l->cos_outer) * l->cone_scale);
+            if (att <= 0) continue;
+            float ndl = n[0] * L[0] + n[1] * L[1] + n[2] * L[2];
+            float kd = att * ((ndl > 0 ? ndl : 0) + l->amb);
+            for (int i = 0; i < 3; i++) c[i] += kd * l->col[i];
+            if (want_spec && ndl > 0) {
+                float dn = 2 * ndl, R[3] = { dn * n[0] - L[0], dn * n[1] - L[1], dn * n[2] - L[2] };
+                float rdv = R[0] * V[0] + R[1] * V[1] + R[2] * V[2];
+                if (rdv > 0) { float ks = att * powf(rdv, sexp); for (int i = 0; i < 3; i++) sp[i] += ks * l->col[i]; }
+            }
         }
-    } else memcpy(c, ma, sizeof c);
-    for (int i = 0; i < 3; i++) col[i] = (uint8_t)(clamp01(c[i]) * 255.0f + 0.5f);
-    /* translucent alpha = poly alpha (103) x vertex alpha (push header bits 24-31), as in Valkyrie */
-    col[3] = translucent ? (uint8_t)(clamp01(t->polyalpha * (v->alpha / 255.0f)) * 255) : 255;
-    fog[0] = fog[1] = fog[2] = fog[3] = 0;
+        for (int i = 0; i < 3; i++) { o->light[i] = c[i]; o->spec[i] = sp[i] * m->specular[i] / 64.0f; }
+    }
+    o->fog[0] = o->fog[1] = o->fog[2] = o->fog[3] = 0;
     static int nofog = -1; if (nofog < 0) nofog = getenv("PH_NOFOG") != 0;
     if (!nofog && vp->fog_on && ((m->flags881 >> 2) & 1)) {
         /* 621 params as built by the game (@0C014A96): P = 1/(end-start), Q = near/end  ->  f = 1 - P*(end - z) */
         float end = vp->fog_bias > 0 ? vp->n / vp->fog_bias : 1e30f;
         float f = clamp01(1.0f - vp->fog_density * (end - (-v->pos[2])));
-        fog[0] = vp->fog_color[0]; fog[1] = vp->fog_color[1]; fog[2] = vp->fog_color[2]; fog[3] = (uint8_t)(f * 255.0f + 0.5f);
+        o->fog[0] = vp->fog_color[0]; o->fog[1] = vp->fog_color[1]; o->fog[2] = vp->fog_color[2]; o->fog[3] = (uint8_t)(f * 255.0f + 0.5f);
     }
 }
 
@@ -198,12 +224,8 @@ void gfx_build(GfxFrame *f, const CpState *s) {
             n[0] = a[1] * b[2] - a[2] * b[1]; n[1] = a[2] * b[0] - a[0] * b[2]; n[2] = a[0] * b[1] - a[1] * b[0];
             if (n[2] < 0) { n[0] = -n[0]; n[1] = -n[1]; n[2] = -n[2]; }    /* face normal towards the viewer (fallback only) */
             int textured = (t->mat.flags881 >> 3) & 1;
-            uint8_t col[3][4], fog[3][4];
-            for (int k = 0; k < 3; k++) {
-                gfx_vertex_shade(s, t, k, n, col[k], fog[k]);
-            }
-            { static long hl = -2; if (hl == -2) { const char *e = getenv("PH_HILITE"); hl = e ? strtol(e, 0, 16) : -1; }
-              if (hl >= 0 && t->tex.w4c1 == (uint32_t)hl) for (int k = 0; k < 3; k++) { col[k][0] = 255; col[k][1] = col[k][2] = 0; col[k][3] = 255; fog[k][3] = 0; } }
+            GfxShade sh[3];
+            for (int k = 0; k < 3; k++) gfx_vertex_shade(s, t, k, n, &sh[k]);
             const CpTexhead *th = &t->tex;
             uint32_t texw = (uint32_t)th->fmt | ((uint32_t)th->bank << 4) |
                             ((uint32_t)((th->wrap >> 1) & 1) << 8) | ((uint32_t)(th->wrap & 1) << 9) |
@@ -211,7 +233,7 @@ void gfx_build(GfxFrame *f, const CpState *s) {
                             ((uint32_t)textured << 16) | ((uint32_t)(t->polytype != 3 && !shadow) << 17) | ((uint32_t)translucent << 18) |
                             ((uint32_t)(t->pattern & 0x1f) << 20);
             reserve(f, 3);
-            for (int k = 0; k < 3; k++) make_vertex(&f->v[f->nv++], t, &t->v[k], col[k], fog[k], texw);
+            for (int k = 0; k < 3; k++) make_vertex(&f->v[f->nv++], t, &t->v[k], &sh[k], texw);
         }
       }
     }

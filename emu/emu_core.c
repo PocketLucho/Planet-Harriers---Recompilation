@@ -13,6 +13,7 @@ void sh4_init_tables(void);
 void sh4_reset(Cpu *c);
 int sh4_take_irq(Cpu *c);
 
+u32 g_trace[16]; int g_ntrace;
 static Machine M;
 static EmuConfig C;
 static u64 t_slice, next_vbl = 3333333, n_blocks, audio_t;
@@ -180,6 +181,11 @@ static int run_slice(void) {
             if (ci == C.stop_cpu && p == (C.stop_pc & 0x1fffffff) && c->cycles >= C.stop_after) { fprintf(stderr, "stop hit\n"); emu_dump_regs(c); return -1; }
             if (p >= 0x0c000000 && p < 0x0e000000) { u32 o = (p - 0x0c000000) >> 1; execmap[ci][o >> 3] |= 1 << (o & 7); }
             if (C.prof_cpu == ci && ((++n_blocks) & 63) == 0) { if (!prof) prof = calloc(1 << 22, 4); prof[(p >> 1) & 0x3fffff]++; }
+            if (g_ntrace) for (int ti = 0; ti < g_ntrace; ti++) if (p == g_trace[ti] && M.log) {
+                char str[96] = ""; u32 a = c->r[5] & 0x1fffffff;
+                if (a >= 0x0c000000 && a < 0x0e000000) { int k = 0; for (; k < 95; k++) { u8 ch = M.ram[ci][(a - 0x0c000000) + k]; if (ch < 32 || ch > 126) break; str[k] = ch; } str[k] = 0; }
+                fprintf(M.log, "TRACE f%llu CPU%d %08x pr=%08x r4=%08x r5=%08x r6=%08x r7=%08x gbr=%08x \"%s\"\n", (unsigned long long)(c->cycles / 3333333), ci, pc, c->pr, c->r[4], c->r[5], c->r[6], c->r[7], c->gbr, str);
+            }
             blk_step(c);
         }
         onchip_tick(c, (int)(c->cycles - c0));

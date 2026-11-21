@@ -21,6 +21,7 @@ typedef struct {
     int pad_mode;       /* gamepad: 0 off, 1 on */
     int invert_y;       /* 1 = up and down swapped (flight-stick style) */
     int lang;           /* interface language: 0 follow Windows, 1 Spanish, 2 English */
+    int launcher;       /* show the launcher at start */
     int region;         /* country written to the EEPROM: 0 Japan, 1 USA, 2 Export, 3 Australia, 4 Korea */
     int keys[ACT_N];    /* virtual-key codes */
 } Settings;

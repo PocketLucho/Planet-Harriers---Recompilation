@@ -33,4 +33,7 @@ void vkr_request_screenshot(void);             /* the next vkr_draw copies its i
 int  vkr_screenshot_ready(void);
 int  vkr_take_screenshot(uint8_t *rgba);       /* w*h*4 (vkr_size), returns 0 when an image was captured */
 const char *vkr_device_name(void);
+/* menus (ui.c): canvas size for the current aspect (960x720 or 1280x720) and its upload; rgba = 0 hides it */
+void vkr_ui_canvas(int *w, int *h);
+void vkr_ui_upload(const uint32_t *rgba, int w, int h);
 void vkr_shutdown(void);

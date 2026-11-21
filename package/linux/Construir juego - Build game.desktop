@@ -1,0 +1,7 @@
+[Desktop Entry]
+Type=Application
+Name=Planet Harriers Recomp - Construir el juego / Build the game
+Comment=Genera libph_game.so desde tu ROM / Builds libph_game.so from your ROM
+Exec=sh -c 'cd "$(dirname "%k")" && ./build_game.sh; echo; read -p "Enter..." x'
+Terminal=true
+Icon=applications-games

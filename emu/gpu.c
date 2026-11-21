@@ -53,7 +53,11 @@ int gpu_handles(u32 a) {
  * copies texel data (with its mipmap chain) into TEXRAM. Done synchronously when started. */
 static void idma_run(Machine *m) {
     u32 *ant = (u32 *)g_gpu.ant_space;
-    while ((ant[0x14 / 4] & 1) && ant[0x10 / 4]) {
+    /* The length register (15000010) reads back unchanged after the transfer: the system library's
+       end-of-transfer interrupt adds it to its count of copied entries (@0C01D4F4), and the game
+       waits on that count before it lets the enemies of a stage appear. */
+    u32 left = ant[0x10 / 4] & 0xffff;
+    while ((ant[0x14 / 4] & 1) && left) {
         u32 t = ant[0x0c / 4];
         if ((t >> 24) != 0x48) break;
         u32 *e = (u32 *)(m->shared + (t & 0x3ffff0));
@@ -80,7 +84,7 @@ static void idma_run(Machine *m) {
             g_gpu.idma_entries++;
         }
         ant[0x0c / 4] += 0x10;
-        ant[0x10 / 4]--;
+        left--;
     }
     ant[0x14 / 4] &= ~1u;
     ant[0x88 / 4] |= 1;            /* GPU 15 IRQ bit 0: IDMA done */

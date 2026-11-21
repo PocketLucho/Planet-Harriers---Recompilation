@@ -15,17 +15,25 @@ Getting started
 Without step 2 the game runs on the interpreter (slower; the window title says so).
 ph_game.dll comes from YOUR copy of the game: personal use only, do not distribute it.
 
-Default keys (change them with F10)
------------------------------------
+Menus
+-----
+The launcher shows at start (Start game / Settings / Quit); it can be turned off in
+Settings > System. In game, Esc or F10 (or Back+Start / L3+R3 on the gamepad) open the pause menu:
+Game (resume, reset, screenshot, back to the launcher, quit), Video (internal resolution 1x-8x,
+MSAA, 16:9 widescreen, fullscreen), Controls (gamepad, key stick speed, invert up/down) and
+System (country, language, launcher at start).
+Gamepad: d-pad/stick to move, A accept, B back, LB/RB change tab. F9 opens the key bindings window.
+
+Default keys
+------------
   5 coin   1 start
   Arrows  stick      Z shot      X missile (lock-on)      C bomb      A / S view change
   F2 test (enters the service menu and confirms)   F1 service (moves the cursor)
-  P pause   F10 OPTIONS   F11 fullscreen   F12 screenshot   Esc quit
+  P pause   Esc / F10 MENU   F9 keys   F11 fullscreen   F12 screenshot
 XInput gamepad: left stick or d-pad = stick, A/RT shot, X/B/LT missile, Y bomb,
-  LB/RB view change, Start start, Back coin.
+  LB/RB view change, Start start, Back coin, Back+Start menu.
 
-Options (F10): language (automatic / espanol / English), internal resolution 1x-8x, MSAA,
-16:9 widescreen, fullscreen, country (Japan, USA, Export/Europe, Australia, Korea),
-stick speed with keys, invert up/down, gamepad and keys.
+If you are updating from an earlier version, run BUILD_GAME.bat again: the list of code to
+recompile now includes the enemies' code.
 
 First release: some graphics faults remain. Detailed status in docs/STATUS.es.md of the repository.

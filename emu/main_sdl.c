@@ -1,6 +1,6 @@
 /* Linux / Steam Deck frontend: SDL2 window + Vulkan, SDL audio, keyboard and gamepad, in-game menu.
  * Usage: ./pharrier [path/to/pharrier.zip]   (default: pharrier.zip next to the program or in roms/)
- * Menu: F10 or L3+R3 on the gamepad (resolution, MSAA, 16:9, fullscreen, stick speed, gamepad, country).
+ * Launcher at start (can be turned off), menu: Esc / F10, or Guide, L3+R3 or Back+Start on the gamepad.
  * Settings: pharrier.ini / pharrier.nv / capturas/ next to the program if it is writable,
  * else in $XDG_CONFIG_HOME/pharrier-recomp (~/.config/pharrier-recomp). */
 #include <SDL.h>
@@ -20,6 +20,10 @@
 #include "swrender.h"
 #include "osd.h"
 #include "ph_input.h"
+#include "ui.h"
+#ifndef PH_VERSION
+#define PH_VERSION "0.5"
+#endif
 
 int gfx_vk_start(const VkrConfig *cfg);
 void gfx_vk_redraw(const uint16_t *lay, uint32_t ena, uint32_t direct);
@@ -30,7 +34,7 @@ enum { ACT_UP, ACT_DOWN, ACT_LEFT, ACT_RIGHT, ACT_SHOT, ACT_MISSILE, ACT_BOMB, A
        ACT_START, ACT_COIN, ACT_TEST, ACT_SERVICE, ACT_PAUSE, ACT_N };
 static const char *act_names[ACT_N] = { "up", "down", "left", "right", "shot", "missile", "bomb", "view_left", "view_right",
     "start", "coin", "test", "service", "pause" };
-static struct { int scale, wide, msaa, fullscreen, stick_speed, pad_mode, invert_y, lang; int keys[ACT_N]; } S;
+static struct { int scale, wide, msaa, fullscreen, stick_speed, pad_mode, invert_y, lang, launcher; int keys[ACT_N]; } S;
 /* interface language: 0 = from the environment (LANG / LC_ALL starting with "es" = Spanish), 1 Spanish, 2 English */
 static int lang_en(void) {
     if (S.lang == 1) return 0;
@@ -42,7 +46,7 @@ static int lang_en(void) {
 static char cfg_dir[PATH_MAX];
 
 static void settings_defaults(void) {
-    S.scale = 2; S.wide = 0; S.msaa = 1; S.fullscreen = 0; S.stick_speed = 5; S.pad_mode = 1; S.invert_y = 0;
+    S.scale = 2; S.wide = getenv("SteamDeck") != 0; S.msaa = getenv("SteamDeck") ? 2 : 1; S.fullscreen = 0; S.stick_speed = 5; S.pad_mode = 1; S.invert_y = 0; S.launcher = 1;
     int k[ACT_N] = { SDL_SCANCODE_UP, SDL_SCANCODE_DOWN, SDL_SCANCODE_LEFT, SDL_SCANCODE_RIGHT, SDL_SCANCODE_Z, SDL_SCANCODE_X,
                      SDL_SCANCODE_C, SDL_SCANCODE_A, SDL_SCANCODE_S, SDL_SCANCODE_1, SDL_SCANCODE_5, SDL_SCANCODE_F2, SDL_SCANCODE_F1, SDL_SCANCODE_P };
     memcpy(S.keys, k, sizeof k);
@@ -69,7 +73,7 @@ static void settings_load(void) {
         char key[64]; int v; if (sscanf(line, " %63[a-z_] = %d", key, &v) != 2) continue;
         if (!strcmp(key, "scale")) S.scale = v; else if (!strcmp(key, "widescreen")) S.wide = !!v;
         else if (!strcmp(key, "msaa")) S.msaa = v; else if (!strcmp(key, "fullscreen")) S.fullscreen = !!v;
-        else if (!strcmp(key, "stick_speed")) S.stick_speed = v; else if (!strcmp(key, "gamepad")) S.pad_mode = !!v; else if (!strcmp(key, "invert_y")) S.invert_y = !!v; else if (!strcmp(key, "language")) S.lang = v;
+        else if (!strcmp(key, "stick_speed")) S.stick_speed = v; else if (!strcmp(key, "gamepad")) S.pad_mode = !!v; else if (!strcmp(key, "invert_y")) S.invert_y = !!v; else if (!strcmp(key, "language")) S.lang = v; else if (!strcmp(key, "launcher")) S.launcher = !!v;
         else for (int i = 0; i < ACT_N; i++) if (!strcmp(key, act_names[i]) && v > 0 && v < SDL_NUM_SCANCODES) S.keys[i] = v;
     }
     fclose(f);
@@ -82,8 +86,8 @@ static void settings_save(void) {
     char p[PATH_MAX + 32]; snprintf(p, sizeof p, "%s/pharrier.ini", cfg_dir);
     FILE *f = fopen(p, "w"); if (!f) return;
     fprintf(f, "; Planet Harriers Recomp (Linux) - opciones (F10 / L3+R3)\n[video]\nscale = %d\nwidescreen = %d\nmsaa = %d\nfullscreen = %d\n\n"
-               "[controles]\n; stick speed (keys) 1..10; gamepad: 0 off, 1 on; invert_y: 1 = up/down swapped; language: 0 auto, 1 es, 2 en\nstick_speed = %d\ngamepad = %d\ninvert_y = %d\nlanguage = %d\n\n"
-               "[keys]\n; SDL scancodes (https://wiki.libsdl.org/SDL2/SDL_Scancode)\n", S.scale, S.wide, S.msaa, S.fullscreen, S.stick_speed, S.pad_mode, S.invert_y, S.lang);
+               "launcher = %d\n\n[controles]\n; stick speed (keys) 1..10; gamepad: 0 off, 1 on; invert_y: 1 = up/down swapped; language: 0 auto, 1 es, 2 en\nstick_speed = %d\ngamepad = %d\ninvert_y = %d\nlanguage = %d\n\n"
+               "[keys]\n; SDL scancodes (https://wiki.libsdl.org/SDL2/SDL_Scancode)\n", S.scale, S.wide, S.msaa, S.fullscreen, S.launcher, S.stick_speed, S.pad_mode, S.invert_y, S.lang);
     for (int i = 0; i < ACT_N; i++) fprintf(f, "%s = %d\n", act_names[i], S.keys[i]);
     fclose(f);
 }
@@ -173,83 +177,72 @@ static void layer_hook(uint16_t *lay, uint32_t *ena, uint32_t *direct) {
     if (status_frames > 0) { status_frames--; osd_banner(lay, ena, direct, status_msg); }
 }
 
-/* ---------------- menu ---------------- */
-static const char *region_es[5] = { "Japón", "EE. UU.", "Exportación (Europa)", "Australia", "Corea" };
-static const char *region_en[5] = { "Japan", "USA", "Export (Europe)", "Australia", "Korea" };
-#define region_names (lang_en() ? region_en : region_es)
-enum { M_CONT, M_SCALE, M_MSAA, M_WIDE, M_FULL, M_SPEED, M_PAD, M_INVY, M_LANG, M_REGION, M_SHOT, M_QUIT, M_N };
-static int menu_open, menu_sel, menu_region, want_restart, want_shot;
-static int msaa_next(int m, int dir) { static const int v[4] = { 1, 2, 4, 8 }; int i = m == 8 ? 3 : m == 4 ? 2 : m == 2 ? 1 : 0; i = (i + dir + 4) % 4; return v[i]; }
-static void menu_change(int dir) {
-    switch (menu_sel) {
-    case M_SCALE: S.scale = (S.scale - 1 + dir + 8) % 8 + 1; break;
-    case M_MSAA: S.msaa = msaa_next(S.msaa, dir); break;
-    case M_WIDE: S.wide = !S.wide; break;
-    case M_FULL: S.fullscreen = !S.fullscreen; set_fullscreen(S.fullscreen); break;
-    case M_SPEED: S.stick_speed = (S.stick_speed - 1 + dir + 10) % 10 + 1; break;
-    case M_PAD: S.pad_mode = !S.pad_mode; break;
-    case M_INVY: S.invert_y = !S.invert_y; break;
-    case M_LANG: S.lang = (S.lang + dir + 3) % 3; break;
-    case M_REGION: menu_region = (menu_region + dir + 5) % 5; break;
-    default: return;
+/* ---------------- menus (ui.c): launcher and pause menu ---------------- */
+static int want_restart, want_shot, restart_launcher;
+static UiOptions uo; static UiInfo ui_info; static char rom_name[128];
+static const char *bind_es[10] = { "Disparo", "Misil", "Bomba", "Vista izquierda", "Vista derecha", "Moneda", "Start", "Test", "Servicio", "Pausa" };
+static const char *bind_en[10] = { "Shot", "Missile", "Bomb", "View left", "View right", "Coin", "Start", "Test", "Service", "Pause" };
+static const int bind_act_id[10] = { ACT_SHOT, ACT_MISSILE, ACT_BOMB, ACT_VR_L, ACT_VR_R, ACT_COIN, ACT_START, ACT_TEST, ACT_SERVICE, ACT_PAUSE };
+static void ui_sync_in(void) {
+    uo.scale = S.scale; uo.wide = S.wide; uo.msaa = S.msaa; uo.fullscreen = fullscreen; uo.stick_speed = S.stick_speed;
+    uo.pad_mode = S.pad_mode; uo.invert_y = S.invert_y; uo.lang = S.lang; uo.region = emu_region(); uo.show_launcher = S.launcher;
+    ui_info.lang_en = lang_en; ui_info.gpu = vkr_device_name(); ui_info.blocks = emu_block_count(); ui_info.msaa_gpu = vkr_msaa();
+    ui_info.pad_name = pad ? SDL_GameControllerName(pad) : 0;
+    if (ui_info.pad_name && !*ui_info.pad_name) ui_info.pad_name = "Gamepad";
+    ui_info.nbind = 10;
+    static char keyn[10][32];
+    for (int i = 0; i < 10; i++) {
+        ui_info.bind_act[i] = (lang_en() ? bind_en : bind_es)[i];
+        snprintf(keyn[i], sizeof keyn[i], "%s", SDL_GetScancodeName((SDL_Scancode)S.keys[bind_act_id[i]])); ui_info.bind_key[i] = keyn[i];
     }
-    if (menu_sel == M_SCALE || menu_sel == M_MSAA || menu_sel == M_WIDE) vkr_reconfigure(S.scale, S.wide, S.msaa);
+}
+static void ui_show(int screen) { ui_sync_in(); ui_open(screen, &uo, &ui_info); }
+static void ui_apply(int r) {   /* options changed in the menu -> settings, renderer, window */
+    S.stick_speed = uo.stick_speed; S.pad_mode = uo.pad_mode; S.invert_y = uo.invert_y; S.lang = uo.lang; S.launcher = uo.show_launcher;
+    if (r == UI_VIDEO) { S.scale = uo.scale; S.wide = uo.wide; S.msaa = uo.msaa; vkr_reconfigure(S.scale, S.wide, S.msaa); ui_info.msaa_gpu = vkr_msaa(); }
+    if (r == UI_FULLSCREEN) { S.fullscreen = uo.fullscreen; set_fullscreen(S.fullscreen); }
+    if (uo.region != emu_region()) emu_set_region(uo.region);   /* before the game starts: the BIOS reads it at boot */
     settings_save();
 }
-static void menu_accept(void) {
-    switch (menu_sel) {
-    case M_CONT: menu_open = 0; break;
-    case M_REGION: if (menu_region != emu_region()) { emu_set_region(menu_region); want_restart = 1; running = 0; } break;
-    case M_SHOT: menu_open = 0; want_shot = 2; break;
-    case M_QUIT: running = 0; break;
-    default: menu_change(1); break;
-    }
-}
-static void menu_draw(void) {
-    static uint16_t lay[640 * 960];
-    uint32_t ena = (uint32_t)gpu_layers(lay), dir = (uint32_t)gpu_layers_direct();
-    OsdItem it[M_N]; memset(it, 0, sizeof it);
-    const char *labels_es[M_N] = { "Continuar", "Resolución interna", "Antialiasing (MSAA)", "Panorámico 16:9", "Pantalla completa",
-                                   "Velocidad palanca (teclas)", "Mando", "Invertir arriba/abajo", "Idioma / Language", "País / región (reinicia)",
-                                   "Captura de pantalla", "Salir" };
-    const char *labels_en[M_N] = { "Continue", "Internal resolution", "Antialiasing (MSAA)", "Widescreen 16:9", "Fullscreen",
-                                   "Stick speed (keys)", "Gamepad", "Invert up/down", "Idioma / Language", "Country / region (restarts)",
-                                   "Screenshot", "Quit" };
-    const char **labels = lang_en() ? labels_en : labels_es;
-    for (int i = 0; i < M_N; i++) { it[i].label = labels[i]; it[i].kind = OSD_ACTION; }
-    for (int i = M_SCALE; i <= M_REGION; i++) it[i].kind = OSD_CHOICE;
-    snprintf(it[M_SCALE].value, 48, "%dx (%dx%d)", S.scale, (S.wide ? 854 : 640) * S.scale, 480 * S.scale);
-    snprintf(it[M_MSAA].value, 48, "%s", S.msaa > 1 ? (S.msaa == 2 ? "2x" : S.msaa == 4 ? "4x" : "8x") : "No");
-    snprintf(it[M_LANG].value, 48, "%s", S.lang == 0 ? "Auto" : S.lang == 1 ? "Español" : "English");
-    if (S.msaa > 1 && vkr_msaa() != S.msaa) snprintf(it[M_MSAA].value, 48, "%dx (GPU: %dx)", S.msaa, vkr_msaa());
-    snprintf(it[M_WIDE].value, 48, "%s", S.wide ? T2("Sí", "Yes") : "No");
-    snprintf(it[M_FULL].value, 48, "%s", S.fullscreen ? T2("Sí", "Yes") : "No");
-    snprintf(it[M_SPEED].value, 48, "%d", S.stick_speed);
-    snprintf(it[M_INVY].value, 48, "%s", S.invert_y ? T2("Sí", "Yes") : "No");
-    snprintf(it[M_PAD].value, 48, "%s", S.pad_mode ? T2("Activado", "On") : T2("Desactivado", "Off"));
-    snprintf(it[M_REGION].value, 48, "%s", region_names[menu_region]);
-    osd_menu(lay, &ena, &dir, T2("PLANET HARRIERS - OPCIONES", "PLANET HARRIERS - OPTIONS"), it, M_N, menu_sel,
-             T2("Arriba/Abajo elegir  Izq/Der cambiar  A aceptar  B volver", "Up/Down select  Left/Right change  A accept  B back"));
-    gfx_vk_redraw(lay, ena, dir);
-}
-static void menu_event(const SDL_Event *e) {
-    int up = 0, down = 0, left = 0, right = 0, ok = 0, back = 0;
+/* one menu key from an SDL event; -1 = none */
+static int ui_key_of(const SDL_Event *e) {
     if (e->type == SDL_KEYDOWN) {
-        SDL_Scancode s = e->key.keysym.scancode;
-        up = s == SDL_SCANCODE_UP; down = s == SDL_SCANCODE_DOWN; left = s == SDL_SCANCODE_LEFT; right = s == SDL_SCANCODE_RIGHT;
-        ok = s == SDL_SCANCODE_RETURN || s == SDL_SCANCODE_SPACE; back = s == SDL_SCANCODE_ESCAPE || s == SDL_SCANCODE_F10 || s == SDL_SCANCODE_BACKSPACE;
-    } else if (e->type == SDL_CONTROLLERBUTTONDOWN) {
-        int b = e->cbutton.button;
-        up = b == SDL_CONTROLLER_BUTTON_DPAD_UP; down = b == SDL_CONTROLLER_BUTTON_DPAD_DOWN;
-        left = b == SDL_CONTROLLER_BUTTON_DPAD_LEFT; right = b == SDL_CONTROLLER_BUTTON_DPAD_RIGHT;
-        ok = b == SDL_CONTROLLER_BUTTON_A; back = b == SDL_CONTROLLER_BUTTON_B || b == SDL_CONTROLLER_BUTTON_START;
-    } else return;
-    if (up) menu_sel = (menu_sel + M_N - 1) % M_N;
-    if (down) menu_sel = (menu_sel + 1) % M_N;
-    if (left) menu_change(-1);
-    if (right) menu_change(1);
-    if (ok) menu_accept();
-    if (back) menu_open = 0;
+        switch (e->key.keysym.scancode) {
+        case SDL_SCANCODE_UP: return UI_KEY_UP; case SDL_SCANCODE_DOWN: return UI_KEY_DOWN;
+        case SDL_SCANCODE_LEFT: return UI_KEY_LEFT; case SDL_SCANCODE_RIGHT: return UI_KEY_RIGHT;
+        case SDL_SCANCODE_RETURN: case SDL_SCANCODE_KP_ENTER: case SDL_SCANCODE_SPACE: return UI_KEY_OK;
+        case SDL_SCANCODE_ESCAPE: case SDL_SCANCODE_BACKSPACE: case SDL_SCANCODE_F10: return UI_KEY_BACK;
+        case SDL_SCANCODE_TAB: return (e->key.keysym.mod & KMOD_SHIFT) ? UI_KEY_PREV : UI_KEY_NEXT;
+        case SDL_SCANCODE_PAGEUP: case SDL_SCANCODE_Q: return UI_KEY_PREV;
+        case SDL_SCANCODE_PAGEDOWN: case SDL_SCANCODE_E: return UI_KEY_NEXT;
+        default: return -1;
+        }
+    }
+    if (e->type == SDL_CONTROLLERBUTTONDOWN) {
+        switch (e->cbutton.button) {
+        case SDL_CONTROLLER_BUTTON_DPAD_UP: return UI_KEY_UP; case SDL_CONTROLLER_BUTTON_DPAD_DOWN: return UI_KEY_DOWN;
+        case SDL_CONTROLLER_BUTTON_DPAD_LEFT: return UI_KEY_LEFT; case SDL_CONTROLLER_BUTTON_DPAD_RIGHT: return UI_KEY_RIGHT;
+        case SDL_CONTROLLER_BUTTON_A: return UI_KEY_OK; case SDL_CONTROLLER_BUTTON_B: case SDL_CONTROLLER_BUTTON_START: return UI_KEY_BACK;
+        case SDL_CONTROLLER_BUTTON_LEFTSHOULDER: return UI_KEY_PREV; case SDL_CONTROLLER_BUTTON_RIGHTSHOULDER: return UI_KEY_NEXT;
+        default: return -1;
+        }
+    }
+    if (e->type == SDL_CONTROLLERAXISMOTION && (e->caxis.axis == SDL_CONTROLLER_AXIS_LEFTY || e->caxis.axis == SDL_CONTROLLER_AXIS_LEFTX)) {
+        static int held[2]; int ax = e->caxis.axis == SDL_CONTROLLER_AXIS_LEFTY, v = e->caxis.value, dir = v > 20000 ? 1 : v < -20000 ? -1 : 0;
+        if (dir == held[ax]) return -1;
+        held[ax] = dir; if (!dir) return -1;
+        return ax ? (dir < 0 ? UI_KEY_UP : UI_KEY_DOWN) : (dir < 0 ? UI_KEY_LEFT : UI_KEY_RIGHT);
+    }
+    return -1;
+}
+static void ui_draw(double t) {
+    static uint32_t *canvas; int w, h; vkr_ui_canvas(&w, &h);
+    if (!canvas) canvas = malloc(1280 * 720 * 4);
+    ui_render(canvas, w, h, t);
+    vkr_ui_upload(canvas, w, h);
+    static uint16_t lay[640 * 960];
+    if (ui_screen() == UI_SCREEN_LAUNCHER) gfx_vk_redraw(lay, 0, 0);
+    else { uint32_t ena = (uint32_t)gpu_layers(lay), dir = (uint32_t)gpu_layers_direct(); gfx_vk_redraw(lay, ena, dir); }
 }
 
 /* ---------------- main ---------------- */
@@ -264,7 +257,12 @@ static const char *find_rom(const char *arg, const char *exe_dir) {
 int main(int argc, char **argv) {
     char exe[PATH_MAX] = "."; ssize_t n = readlink("/proc/self/exe", exe, sizeof exe - 1);
     if (n > 0) { exe[n] = 0; char *sl = strrchr(exe, '/'); if (sl) *sl = 0; }
-    const char *rom = find_rom(argc > 1 ? argv[1] : 0, exe);
+    const char *rom_arg = 0;
+    for (int i = 1; i < argc; i++) {
+        if (!strcmp(argv[i], "--launcher")) restart_launcher = 1; else if (!strcmp(argv[i], "--no-launcher")) restart_launcher = -1;
+        else if (argv[i][0] != '-') rom_arg = argv[i];
+    }
+    const char *rom = find_rom(rom_arg, exe);
     static char modpath[PATH_MAX + 32]; snprintf(modpath, sizeof modpath, "%s/libph_game.so", exe);
     if (getenv("PH_BUILDER_DUMP")) {       /* builder: run headless on the interpreter and dump the RAM of both CPUs */
         if (!rom) return 2;
@@ -301,6 +299,10 @@ int main(int argc, char **argv) {
     g_vk_layer_hook = layer_hook;
     kb = SDL_GetKeyboardState(0);
     open_pad(); audio_init();
+    {   const char *b = strrchr(rom, '/'); snprintf(rom_name, sizeof rom_name, "%s", b ? b + 1 : rom); }
+    ui_info.version = PH_VERSION; ui_info.rom = rom_name; ui_info.platform = getenv("SteamDeck") ? "Steam Deck" : "Linux";
+    /* the launcher, unless turned off (or skipped by a restart from the menu) */
+    if (restart_launcher > 0 || (S.launcher && restart_launcher == 0 && !getenv("PH_NOLAUNCHER"))) ui_show(UI_SCREEN_LAUNCHER);
     Uint64 freq = SDL_GetPerformanceFrequency(), t0 = SDL_GetPerformanceCounter();
     double next = 0, fps_t = 0; long frames = 0, fps_n = 0;
     while (running) {
@@ -308,37 +310,54 @@ int main(int argc, char **argv) {
         while (SDL_PollEvent(&e)) {
             if (e.type == SDL_QUIT) running = 0;
             else if (e.type == SDL_WINDOWEVENT && (e.window.event == SDL_WINDOWEVENT_SIZE_CHANGED || e.window.event == SDL_WINDOWEVENT_RESIZED)) update_size();
-            else if (e.type == SDL_CONTROLLERDEVICEADDED) open_pad();
-            else if (e.type == SDL_CONTROLLERDEVICEREMOVED && pad && e.cdevice.which == SDL_JoystickInstanceID(SDL_GameControllerGetJoystick(pad))) { SDL_GameControllerClose(pad); pad = 0; status(T2("Mando desconectado", "Gamepad disconnected")); open_pad(); }
-            if (menu_open) { menu_event(&e); continue; }
+            else if (e.type == SDL_CONTROLLERDEVICEADDED) { open_pad(); ui_info.pad_name = pad ? SDL_GameControllerName(pad) : 0; }
+            else if (e.type == SDL_CONTROLLERDEVICEREMOVED && pad && e.cdevice.which == SDL_JoystickInstanceID(SDL_GameControllerGetJoystick(pad))) { SDL_GameControllerClose(pad); pad = 0; status(T2("Mando desconectado", "Gamepad disconnected")); open_pad(); ui_info.pad_name = pad ? SDL_GameControllerName(pad) : 0; }
+            if (ui_is_open()) {
+                int k = ui_key_of(&e); if (k < 0) continue;
+                int r = ui_key(k);
+                switch (r) {
+                case UI_START: case UI_RESUME: break;
+                case UI_QUIT: running = 0; break;
+                case UI_SCREENSHOT: want_shot = 2; break;
+                case UI_RESET: want_restart = 1; restart_launcher = -1; running = 0; break;      /* a fresh boot, straight into the game */
+                case UI_LAUNCHER: want_restart = 1; restart_launcher = 1; running = 0; break;    /* a fresh boot behind the launcher */
+                case UI_REGION: ui_apply(r); want_restart = 1; restart_launcher = -1; running = 0; break;
+                case UI_NONE: break;
+                default: ui_apply(r); break;
+                }
+                if (!ui_is_open()) { vkr_ui_upload(0, 0, 0); kb = SDL_GetKeyboardState(0); }
+                continue;
+            }
             if (e.type == SDL_KEYDOWN && !e.key.repeat) {
                 SDL_Scancode s = e.key.keysym.scancode;
-                if (s == SDL_SCANCODE_ESCAPE) running = 0;
+                if (s == SDL_SCANCODE_ESCAPE || s == SDL_SCANCODE_F10) ui_show(UI_SCREEN_PAUSE);
                 else if (s == SDL_SCANCODE_F11) { S.fullscreen = !fullscreen; set_fullscreen(S.fullscreen); settings_save(); }
-                else if (s == SDL_SCANCODE_F10) { menu_open = 1; menu_sel = 0; menu_region = emu_region(); }
                 else if (s == SDL_SCANCODE_F12) want_shot = 1;
                 else if ((int)s == S.keys[ACT_PAUSE]) paused = !paused;
                 if ((int)s == S.keys[ACT_COIN]) g_input.coins[0]++;
             } else if (e.type == SDL_CONTROLLERBUTTONDOWN) {
                 int b = e.cbutton.button;
-                if (b == SDL_CONTROLLER_BUTTON_BACK) g_input.coins[0]++;
+                if (b == SDL_CONTROLLER_BUTTON_BACK && !PB(SDL_CONTROLLER_BUTTON_START)) g_input.coins[0]++;
                 if ((b == SDL_CONTROLLER_BUTTON_LEFTSTICK && PB(SDL_CONTROLLER_BUTTON_RIGHTSTICK)) ||
-                    (b == SDL_CONTROLLER_BUTTON_RIGHTSTICK && PB(SDL_CONTROLLER_BUTTON_LEFTSTICK)) || b == SDL_CONTROLLER_BUTTON_GUIDE) {
-                    menu_open = 1; menu_sel = 0; menu_region = emu_region();
-                }
+                    (b == SDL_CONTROLLER_BUTTON_RIGHTSTICK && PB(SDL_CONTROLLER_BUTTON_LEFTSTICK)) || b == SDL_CONTROLLER_BUTTON_GUIDE ||
+                    (b == SDL_CONTROLLER_BUTTON_START && PB(SDL_CONTROLLER_BUTTON_BACK)) || (b == SDL_CONTROLLER_BUTTON_BACK && PB(SDL_CONTROLLER_BUTTON_START)))
+                    ui_show(UI_SCREEN_PAUSE);
             }
         }
-        {   /* test hooks: PH_AUTOMENU=<frame> opens the menu (PH_MENUSEL=<item>), PH_AUTOQUIT=<frame> quits */
+        {   /* test hooks: PH_AUTOMENU=<frame> opens the menu (PH_MENUKEYS=<keys, UI_KEY_* digits>), PH_AUTOQUIT=<frame> quits */
             static long am = -2, aq = -2; if (am == -2) { am = getenv("PH_AUTOMENU") ? atol(getenv("PH_AUTOMENU")) : -1; aq = getenv("PH_AUTOQUIT") ? atol(getenv("PH_AUTOQUIT")) : -1; }
-            if (frames == am && !menu_open) { menu_open = 1; menu_sel = getenv("PH_MENUSEL") ? atoi(getenv("PH_MENUSEL")) : 0; menu_region = emu_region(); am = -1; }
-            static long mf; if (menu_open) mf++;
-            if (aq >= 0 && (frames >= aq || mf > 60)) running = 0;
+            if (frames == am && !ui_is_open()) { ui_show(UI_SCREEN_PAUSE); const char *k = getenv("PH_MENUKEYS"); for (; k && *k; k++) ui_key(*k - '0'); am = -1; }
+            static long mf; if (ui_is_open()) mf++;
+            if (aq >= 0 && (frames >= aq || mf > 90)) running = 0;
         }
-        if (menu_open || paused) {
+        if (ui_is_open() || paused) {
             if (adev) SDL_PauseAudioDevice(adev, 1);
-            if (menu_open) menu_draw();
+            if (ui_is_open()) ui_draw((double)(SDL_GetPerformanceCounter() - t0) / freq);
             else { static uint16_t lay[640 * 960]; uint32_t ena = (uint32_t)gpu_layers(lay), dir = (uint32_t)gpu_layers_direct();
                    osd_banner(lay, &ena, &dir, T2("PAUSA  (P para continuar)", "PAUSED  (P to resume)")); gfx_vk_redraw(lay, ena, dir); }
+            {   static int shot_n; const char *sp = getenv("PH_UISHOT");   /* test hook: save the menu picture */
+                if (sp && ui_is_open() && ++shot_n == 20) { vkr_request_screenshot(); gfx_vk_redraw((uint16_t[640*960]){0}, 0, 0); }
+                if (sp && vkr_screenshot_ready()) { int w, h; vkr_size(&w, &h); uint8_t *px = malloc((size_t)w * h * 4); vkr_take_screenshot(px); sr_png_rgba(sp, px, w, h); free(px); } }
             SDL_Delay(16);
             next = (double)(SDL_GetPerformanceCounter() - t0) / freq; aud_r = g_aud_w;
             continue;
@@ -365,6 +384,10 @@ int main(int argc, char **argv) {
     vkr_shutdown();
     if (adev) SDL_CloseAudioDevice(adev);
     SDL_Quit();
-    if (want_restart) execv("/proc/self/exe", argv);   /* country changed: the BIOS reads it at boot */
+    if (want_restart) {   /* reset, back to the launcher or country changed (the BIOS reads it at boot): boot again */
+        char *nargv[4]; int n = 0; nargv[n++] = argv[0]; if (argc > 1 && argv[1][0] != '-') nargv[n++] = argv[1];
+        nargv[n++] = restart_launcher > 0 ? "--launcher" : "--no-launcher"; nargv[n] = 0;
+        execv("/proc/self/exe", nargv);
+    }
     return 0;
 }

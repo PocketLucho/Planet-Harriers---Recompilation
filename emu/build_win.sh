@@ -13,7 +13,7 @@ if [ ! -f $STAMP ] || [ -n "$(find . ../third_party/volk ../third_party/miniz -n
 fi
 [ build_win.sh -nt $STAMP ] && rm -f $OUT/obj/*.o
 CFLAGS="-O2 -I. -I../third_party/miniz -I../third_party/volk -I../third_party/Vulkan-Headers/include -DVK_NO_PROTOTYPES -DVK_USE_PLATFORM_WIN32_KHR -w"
-SRC="sh4interp.c hikaru.c x76f100.c gpu.c mie.c z80.c crypt5881.c blockrt.c blk_module.c blk_stub.c hikaru_cp.c hikaru_gfx.c swrender.c romzip.c arm7.c aica.c emu_core.c vkrender.c gfx_vk.c settings_win32.c main_win32.c ../third_party/volk/volk.c ../third_party/miniz/miniz.c"
+SRC="sh4interp.c hikaru.c x76f100.c gpu.c mie.c z80.c crypt5881.c blockrt.c blk_module.c blk_stub.c hikaru_cp.c hikaru_gfx.c swrender.c romzip.c arm7.c aica.c emu_core.c vkrender.c gfx_vk.c settings_win32.c ui.c main_win32.c ../third_party/volk/volk.c ../third_party/miniz/miniz.c"
 OBJS=""
 for f in $SRC; do
   o=$OUT/obj/$(echo $f | tr '/.' '__').o

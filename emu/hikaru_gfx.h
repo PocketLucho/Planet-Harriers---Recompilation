@@ -7,11 +7,22 @@
 typedef struct {
     float clip[4];        /* clip-space position (w = -eye.z) */
     float uv[2];          /* texel units */
-    uint8_t color[4];     /* RGBA modulation */
+    float light[4];       /* rgb: what the lit colour is multiplied by (may exceed 1), a: polygon x vertex alpha */
+    float spec[4];        /* rgb: specular added after the multiply (already x the 491 colour) */
+    uint8_t base[4];      /* 091 colour */
+    uint8_t col1[4];      /* 291 colour */
     uint32_t tex[4];      /* x: fmt | bank<<4 | wrapU<<8 | wrapV<<9 | mirU<<10 | mirV<<11 | textured<<16 | punch<<17 | translucent<<18 | pattern(501)<<20
-                             y: baseX | baseY<<16    z: logW | logH<<8    w: unused */
+                             y: baseX | baseY<<16    z: logW | logH<<8
+                             w: texel mode (0-4) | alpha mode<<3 | lit<<4 */
     uint8_t fog[4];       /* fog colour RGB + factor A (0 = no fog), applied after texturing */
 } GfxVertex;
+
+/* the shading of one vertex, shared by the Vulkan and software renderers */
+typedef struct {
+    float light[4], spec[4];
+    uint8_t base[4], col1[4], fog[4];
+    uint32_t modes;       /* GfxVertex.tex[3] */
+} GfxShade;
 
 /* draw ranges, in submission order; kind selects the pipeline state */
 enum { GFX_OPAQUE = 0, GFX_BLEND = 1, GFX_ADD = 2, GFX_TOP_BLEND = 3, GFX_TOP_ADD = 4 };
@@ -32,4 +43,4 @@ typedef struct {
 extern float g_gfx_xscale;
 void gfx_build(GfxFrame *f, const CpState *s);
 /* per-vertex lighting + fog of vertex k (shared with the software renderer) */
-void gfx_vertex_shade(const CpState *s, const CpTri *t, int k, const float face_n[3], uint8_t col[4], uint8_t fog[4]);
+void gfx_vertex_shade(const CpState *s, const CpTri *t, int k, const float face_n[3], GfxShade *o);

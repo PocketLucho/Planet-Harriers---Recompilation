@@ -148,6 +148,7 @@ void cp_frame(CpState *s, uint32_t start_pc, long max_steps) {
             break;
         case 0x012: case 0x052: {                                  /* jump / call, conditional on the level of detail */
             uint32_t a = in[1] * 4; if (w & 0x800) a += s->pc;
+            if (s->log && (w & 0xf000)) fprintf(s->log, "   COND op=%03x c=%x id=%u size=%.2f r=%.3f dist=%.3f f=%.2f cond=%d cmp=%d br=%u -> %d\n", op, (w >> 12) & 15, w >> 16, lod_size(s), s->lod_radius, s->lod_dist, s->vp_scratch.f, s->lod_cond, s->lod_compared, s->lod_branch, op == 0x012 ? jump_cond(s, w) : call_cond(s, w));
             if (op == 0x012 ? jump_cond(s, w) : call_cond(s, w)) {
                 if (op == 0x052) { if (s->sp < 64) { s->pat_stack[s->sp] = s->pattern; s->stack[s->sp++] = s->pc; } }
                 else if (a == s->pc) { s->running = 0; break; }    /* a jump to itself parks the processor */
@@ -158,7 +159,7 @@ void cp_frame(CpState *s, uint32_t start_pc, long max_steps) {
             if (call_cond(s, w)) { if (s->sp > 0) { --s->sp; next = s->stack[s->sp] + 8; s->pattern = s->pat_stack[s->sp]; } else s->running = 0; }
             break;
         case 0x1c2: s->running = 0; break;                         /* kill */
-        case 0x005: { uint32_t t = w & 0xfffff000; s->lod_radius = f32(t); s->lod_cond = lod_sphere_visible(s); break; }   /* test the bounding sphere */
+        case 0x005: { uint32_t t = w & 0xfffff000; s->lod_radius = f32(t); s->lod_cond = getenv("NOCULL") ? 1 : lod_sphere_visible(s); break; }   /* test the bounding sphere */
         case 0x055: s->lod_radius = f32(in[1]); s->lod_compared = 0; break;                                               /* radius of the bounding sphere */
         case 0x095: {                                              /* compare the size on the screen with two thresholds */
             float size = lod_size(s); uint32_t hi = in[1] >> 16, lo = in[1] & 0xffff; int form = (w >> 12) & 0xf;
@@ -210,16 +211,22 @@ void cp_frame(CpState *s, uint32_t start_pc, long max_steps) {
             } else if (sub == 9 || sub == 0xb) {                   /* light vectors (eye space) */
                 CpLight *l = &s->lit_scratch; float v[3] = { f32(in[1]), f32(in[2]), f32(in[3]) };
                 switch (w & 0x000ff000) {
-                case 0x00008000: memcpy(l->dir, v, sizeof v); l->has_dir = 1; break;
-                case 0x00010000: memcpy(l->pos, v, sizeof v); l->has_pos = 1; break;
-                case 0x00016000: memset(l->pos, 0, sizeof l->pos); l->has_pos = 1; break;
+                case 0x00008000:                                   /* B61: spot axis; 961: direction */
+                    if (sub == 0xb) { memcpy(l->spot, v, sizeof v); l->has_spot = 1; }
+                    else { memcpy(l->dir, v, sizeof v); l->has_dir = 1; }
+                    break;
+                case 0x00010000: case 0x00016000: memcpy(l->pos, v, sizeof v); l->has_pos = 1; break;
                 }
             }
             break;
         case 0x051: {
             CpLight *l = &s->lit_scratch;
-            if (sub == 0) { l->diffuse[0] = in[1] & 0x3ff; l->diffuse[1] = (in[1] >> 10) & 0x3ff; l->diffuse[2] = (in[1] >> 20) & 0x3ff; }
-            else if (sub == 4) { l->has_spec = ((w >> 24) & 1) ^ 1; l->specular[0] = in[1]; l->specular[1] = in[1] >> 8; l->specular[2] = in[1] >> 16; }
+            if (sub == 0) { l->ambient = (w >> 16) & 15; l->diffuse[0] = in[1] & 0x3ff; l->diffuse[1] = (in[1] >> 10) & 0x3ff; l->diffuse[2] = (in[1] >> 20) & 0x3ff; }
+            else if (sub == 4) {                                   /* 451: spot cone (cos of the outer angle, 1.15; fade scale, 4.4 float) */
+                uint32_t sw = (in[1] >> 16) & 0xff;
+                l->has_cone = !((w >> 24) & 1); l->cos_outer = (float)(in[1] & 0xffff) / 32768.0f;
+                l->cone_scale = ldexpf(1.0f + (float)(sw & 15) / 16.0f, (int)(sw >> 4));
+            }
             break; }
         case 0x061: { CpLight *l = &s->lit_scratch;
             l->att_type = (w >> 16) & 3; l->att[0] = f32(in[1]); l->att[1] = f32(in[2]); l->has_pos = l->has_dir = 0; break; }
@@ -237,6 +244,7 @@ void cp_frame(CpState *s, uint32_t start_pc, long max_steps) {
             case 0: s->mat_scratch.diffuse[0] = in[1]; s->mat_scratch.diffuse[1] = in[1] >> 8; s->mat_scratch.diffuse[2] = in[1] >> 16; break;
             case 2: s->mat_scratch.ambient[0] = in[1]; s->mat_scratch.ambient[1] = in[1] >> 8; s->mat_scratch.ambient[2] = in[1] >> 16; break;
             case 4: for (int i = 0; i < 4; i++) s->mat_scratch.specular[i] = in[1] >> (i * 8); break;
+            case 6: s->mat_scratch.amb16[0] = w >> 16; s->mat_scratch.amb16[1] = in[1] & 0xffff; s->mat_scratch.amb16[2] = in[1] >> 16; break;
             }
             break;
         case 0x081:
