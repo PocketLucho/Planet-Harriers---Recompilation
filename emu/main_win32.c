@@ -20,7 +20,7 @@
 #include "swrender.h"
 #include "ui.h"
 #ifndef PH_VERSION
-#define PH_VERSION "0.5"
+#define PH_VERSION "0.2"
 #endif
 #include <wchar.h>
 

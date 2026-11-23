@@ -22,7 +22,7 @@
 #include "ph_input.h"
 #include "ui.h"
 #ifndef PH_VERSION
-#define PH_VERSION "0.5"
+#define PH_VERSION "0.2"
 #endif
 
 int gfx_vk_start(const VkrConfig *cfg);
