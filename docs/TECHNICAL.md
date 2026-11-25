@@ -59,6 +59,11 @@ addresses (not the bytes) to `builder/seeds_hikaru.txt`.
   at 0x390 says, the slave is parked at its mailbox and the BOOTROM's "starting up" byte (GBR+20) is cleared.
 * Idle loops: `0C0125CE` (vblank counters at GBR+0 / GBR+2) and `0C01C14A` (busy wait on an elapsed-time
   function built on TCNT0; the skipper evaluates the same expression from the routine's literal pool).
+* Model culling: the game drops models itself, before the command list is written. `0C039C20` builds four
+  planes through the eye for a 640-pixel window (eye space at `0C289214`, world space at `0C2891E4`) and
+  bounding spheres and boxes are tested against them (`0C039DE0`, `0C039EA0`, `0C03A760`, `0C03A800`). In
+  widescreen `emu_core.c` opens the left and right planes when that function is done (`0C039D7E`);
+  otherwise models vanish before the 16:9 edge.
 * Controls: JVS analog 0 = stick up/down (low = up), analog 1 = left/right (low = left); switches 0x0200
   trigger, 0x0100 missile, 0x0080 bomb, 0x0800 / 0x0400 view change.
 * Command processor additions: LOD (005 / 055 / 095 / 561, jump conditions 1, 5, 6, 7, 9, D, call and return

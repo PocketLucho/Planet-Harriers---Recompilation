@@ -21,8 +21,8 @@ Menus
 The launcher shows at start (Start game / Settings / Quit); it can be turned off in
 Settings > System. In game, Esc or F10 (or Back+Start / L3+R3 on the gamepad) open the pause menu:
 Game (resume, reset, screenshot, back to the launcher, quit), Video (internal resolution 1x-8x,
-MSAA, 16:9 widescreen, clean widescreen edges, hide back faces, fullscreen), Controls (gamepad, key stick speed, invert up/down) and
-System (country, language, launcher at start).
+MSAA, 16:9 widescreen, clean widescreen edges, hide back faces, fullscreen), Controls (gamepad,
+key stick speed, invert up/down) and System (country, language, launcher at start).
 Gamepad: d-pad/stick to move, A accept, B back, LB/RB change tab. F9 opens the key bindings window.
 
 Default keys

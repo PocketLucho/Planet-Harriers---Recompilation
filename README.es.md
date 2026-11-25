@@ -47,9 +47,11 @@ sale de TU copia del juego: es para uso personal, no lo distribuyas.
 | Test / Service | F2 / F1 | |
 | Pausa, opciones, pantalla completa, captura, salir | P, F10, F11, F12, Esc | L3+R3 opciones (Linux) |
 
-Opciones: resolución interna 1x-8x, MSAA, panorámico 16:9 (bordes limpios opcionales: bandas negras junto a las pantallas solo 4:3, como el título, y franjas de cine a todo lo ancho), ocultar caras traseras, pantalla completa, país (Japón, EE. UU.,
-Exportación, Australia, Corea; por defecto Exportación, textos en inglés), velocidad de la palanca con
-teclas, invertir arriba/abajo, idioma de la interfaz (español / inglés).
+Opciones: resolución interna 1x-8x, MSAA, panorámico 16:9 (bordes limpios opcionales: bandas negras junto a
+las pantallas solo 4:3, como el título, y franjas de cine a todo lo ancho), ocultar caras traseras,
+pantalla completa, país (Japón, EE. UU., Exportación, Australia, Corea; por defecto Exportación, textos en
+inglés), velocidad de la palanca con teclas, invertir arriba/abajo, idioma de la interfaz (español /
+inglés).
 
 ## Estado
 

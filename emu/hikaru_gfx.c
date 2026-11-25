@@ -5,9 +5,8 @@
 #include "hikaru_gfx.h"
 #include "gpu.h"
 
-float g_gfx_xscale = 1.0f;
-int g_gfx_clean_edges = 0;   /* widescreen "clean edges" option: also catch flat quads whose z differ by rounding */   /* 0.75 in widescreen: the 4:3 image covers the central 3/4, more world at the sides */
-
+float g_gfx_xscale = 1.0f;   /* 0.75 in widescreen: the 4:3 image covers the central 3/4, more world at the sides */
+int g_gfx_clean_edges = 0;   /* widescreen "clean edges" option: also catch flat quads whose z differ by rounding */
 int g_gfx_backface_cull = 0;
 
 /* Back-face culling. emit_tri() has already put every triangle in the order its winding bit asks for, so the
