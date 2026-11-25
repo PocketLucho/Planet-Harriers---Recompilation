@@ -40,6 +40,7 @@ static struct {
     VkImage lay; VkDeviceMemory laymem; VkImageView layview; VkBuffer laystage; VkDeviceMemory laystagemem; void *laystagemap;
     int lay_dirty, lay_init; uint32_t lay_ena, lay_direct;
     int pillarbox, lay_fullscreen;    /* widescreen: black sides while a full-screen 2D picture is on top of the 3D */
+    uint32_t lay_smear;               /* clean edges: bit layer*2+side = that edge column may still be extended */
     VkPipeline pipe_overlay_behind;
     /* menus: premultiplied RGBA canvas (UI_W x UI_H, the used part uw x uh), drawn last over everything */
     VkImage ui; VkDeviceMemory uimem; VkImageView uiview; VkBuffer uistage; VkDeviceMemory uistagemem; void *uistagemap;
@@ -417,9 +418,34 @@ static int layer_fullscreen(const uint16_t *lay640x960, uint32_t ena, uint32_t d
     return 0;
 }
 
+/* clean edges: an edge column is extended over the 16:9 side only if it is smooth (a plain backdrop such as the
+ * white of the SEGA logo screen) and covers at least half the height; detailed pictures (title, stage previews)
+ * and small or sliding graphics are clipped to the 4:3 area instead of turning into stripes */
+static uint32_t layer_smear_mask(const uint16_t *lay640x960, uint32_t ena) {
+    uint32_t m = 0;
+    for (int l = 0; l < 2; l++) {
+        if (!(ena & (1u << l))) continue;
+        const uint16_t *L = lay640x960 + 640 * 480 * l;
+        for (int sd = 0; sd < 2; sd++) {
+            int x = sd ? 639 : 0, n = 0, jumps = 0, prev = -1;
+            for (int y = 0; y < 480; y++) {
+                uint16_t p = L[y * 640 + x];
+                if (!(p >> 15)) { prev = -1; continue; }
+                n++;
+                if (prev >= 0) { int d = 0; for (int c = 0; c < 15; c += 5) { int a = (p >> c) & 31, b = (prev >> c) & 31; d += a > b ? a - b : b - a; }
+                                 if (d > 3) jumps++; }
+                prev = p;
+            }
+            if (n >= 240 && jumps * 20 < n) m |= 1u << (l * 2 + sd);
+        }
+    }
+    return m;
+}
+
 void vkr_layers_upload(const uint16_t *lay640x960, uint32_t ena, uint32_t direct) {
     vkr_wait();
     V.lay_ena = ena; V.lay_direct = direct;
+    V.lay_smear = ena && V.wide && V.pillarbox ? layer_smear_mask(lay640x960, ena) : 0;
     V.lay_fullscreen = ena && V.wide && V.pillarbox && layer_fullscreen(lay640x960, ena, direct);
     if (ena) { memcpy(V.laystagemap, lay640x960, 640 * 960 * 2); V.lay_dirty = 1; }
 }
@@ -549,7 +575,8 @@ void vkr_draw(const GfxFrame *f) {
         for (int pass = 0; pass < 2; pass++) {
             uint32_t ena = (V.lay_ena & (pass ? V.lay_direct : ~V.lay_direct) & 3) | (V.lay_ena & 4);   /* bit 2: layer 1 on top */
             if (!ena) continue;
-            struct { uint32_t ena; float scale; float xoff; } pc = { ena, (float)V.cfg.scale, (float)(V.w - 640 * V.cfg.scale) * 0.5f };
+            struct { uint32_t ena; float scale; float xoff; uint32_t clip; } pc = { ena, (float)V.cfg.scale, (float)(V.w - 640 * V.cfg.scale) * 0.5f,
+                                                                    (uint32_t)(V.wide && V.pillarbox) | (V.lay_smear << 1) };
             vkCmdBindPipeline(V.cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pass ? V.pipe_overlay : V.pipe_overlay_behind);
             vkCmdPushConstants(V.cmd, V.pl, VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof pc, &pc);
             vkCmdDraw(V.cmd, 3, 1, 0, 0);
