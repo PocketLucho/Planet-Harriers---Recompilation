@@ -63,7 +63,7 @@ int main(int argc, char **argv) {
         else if (!strcmp(argv[i], "-analog")) { ev[nev].frame = atol(argv[++i]); ev[nev].kind = 2; ev[nev].mask = atoi(argv[++i]); ev[nev].len = strtoul(argv[++i], 0, 16); nev++; }
         else { fprintf(stderr, "unknown option %s\n", argv[i]); return 1; }
     }
-    emu_init(&c);
+    if (emu_init(&c)) return 1;
     if (nvpath) fprintf(stderr, "nvram %s: %s\n", nvpath, emu_nv_load(nvpath) == 0 ? "loaded" : "not found (fresh)");
     if (region >= 0) emu_set_region(region);
 #ifdef HAVE_VULKAN

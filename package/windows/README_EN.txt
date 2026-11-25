@@ -8,6 +8,7 @@ This package contains NO game code, graphics, sound or BIOS.
 Getting started
 ---------------
 1. Copy your MAME romset pharrier.zip (with the BIOS epr-23400a.ic94 inside) to the "roms" folder.
+   With a split set (BIOS in a separate hikaru.zip), copy hikaru.zip there too.
 2. Run BUILD_GAME.bat once. It downloads the llvm-mingw compiler (180 MB, first time only), reads
    the game program from your ROM, translates it to C and compiles it into ph_game.dll. It takes a
    few minutes. An internet connection is needed the first time.

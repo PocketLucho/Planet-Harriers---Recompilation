@@ -48,7 +48,9 @@ typedef struct Machine {
 } Machine;
 
 extern Machine *g_m;
-void hikaru_init(Machine *m, const char *romdir);
+/* 0 = ok; otherwise one of: */
+enum { HIKARU_ERR_ROM = -1, HIKARU_ERR_BIOS = -2, HIKARU_ERR_GAME = -3 };
+int hikaru_init(Machine *m, const char *romdir);
 u32 pci_r32(Machine *m, u32 a, u32 mask);
 void pci_w32(Machine *m, u32 a, u32 v, u32 mask);
 void cpu_check_irq(Cpu *c);

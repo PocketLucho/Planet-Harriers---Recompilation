@@ -267,7 +267,7 @@ int main(int argc, char **argv) {
     if (getenv("PH_BUILDER_DUMP")) {       /* builder: run headless on the interpreter and dump the RAM of both CPUs */
         if (!rom) return 2;
         EmuConfig bc = { 0 }; bc.rom = rom; bc.hleboot = 1; bc.idle_skip = 1; bc.stop_cpu = -1; bc.prof_cpu = -1;
-        if (emu_init(&bc)) return 2;
+        { int er = emu_init(&bc); if (er) return er == HIKARU_ERR_BIOS ? 4 : er == HIKARU_ERR_GAME ? 5 : 2; }   /* 4: no BIOS, 5: no game program */
         for (int f = 0; f < 3000; f++) if (emu_run_frame() < 0) break;
         return emu_builder_dump(getenv("PH_BUILDER_DUMP")) ? 3 : 0;
     }
@@ -286,7 +286,13 @@ int main(int argc, char **argv) {
     EmuConfig c = { 0 };
     c.rom = rom; c.hleboot = 1; c.aot = 1; c.idle_skip = 1; c.stop_cpu = -1; c.prof_cpu = -1; c.logpath = getenv("PH_LOG") ? "hikaru.log" : 0;
     if (access(modpath, R_OK) == 0) c.module = modpath;
-    if (emu_init(&c)) { SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "Planet Harriers - Recomp", T2("No se pudo cargar la ROM.", "The ROM could not be loaded."), win); return 1; }
+    { int er = emu_init(&c); if (er) {
+        SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "Planet Harriers - Recomp",
+            er == HIKARU_ERR_BIOS ? T2("Falta la BIOS de Hikaru.\nTu pharrier.zip no la incluye (romset partido de MAME): copia también hikaru.zip en la carpeta 'roms'.",
+                                       "The Hikaru BIOS is missing.\nYour pharrier.zip does not include it (MAME split set): copy hikaru.zip to the 'roms' folder too.")
+          : er == HIKARU_ERR_GAME ? T2("A pharrier.zip le faltan archivos del juego (epr-23565a / epr-23566a).", "pharrier.zip is missing game files (epr-23565a / epr-23566a).")
+          : T2("No se pudo cargar la ROM.", "The ROM could not be loaded."), win);
+        return 1; } }
     nv_load();
     unsigned ne = 0; SDL_Vulkan_GetInstanceExtensions(win, &ne, 0);
     const char **ext = calloc(ne + 1, sizeof *ext); SDL_Vulkan_GetInstanceExtensions(win, &ne, ext);

@@ -8,6 +8,7 @@ Este paquete NO contiene codigo, graficos, sonido ni BIOS del juego.
 Primeros pasos
 --------------
 1. Copia tu romset de MAME pharrier.zip (con la BIOS epr-23400a.ic94 dentro) en la carpeta "roms".
+   Con un romset partido (la BIOS en un hikaru.zip aparte), copia también hikaru.zip.
 2. Ejecuta CONSTRUIR_JUEGO.bat una vez. Descarga el compilador llvm-mingw (180 MB, solo la primera
    vez), lee el programa del juego de tu ROM, lo traduce a C y lo compila en ph_game.dll. Tarda
    unos minutos. Hace falta conexion a internet la primera vez.

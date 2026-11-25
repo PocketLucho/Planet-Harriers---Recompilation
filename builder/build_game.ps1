@@ -61,6 +61,8 @@ function Build-Module($name, $exe, $envName, $images, $seeds, $machine, $out) {
 	Set-Item "Env:$envName" 'builder\work'
 	$p = Start-Process -FilePath $exe -WorkingDirectory $root -PassThru -Wait
 	Remove-Item "Env:$envName"
+	if ($p.ExitCode -eq 4) { Clean; Fail "$name`: falta la BIOS de Hikaru. Tu romset está partido: copia también hikaru.zip en 'roms'." "$name`: the Hikaru BIOS is missing. Your romset is split: copy hikaru.zip to 'roms' too." }
+	if ($p.ExitCode -eq 5) { Clean; Fail "$name`: a pharrier.zip le faltan archivos del juego." "$name`: pharrier.zip is missing game files." }
 	$bgArgs = @('-o', $genDir, '-n', '16')
 	foreach ($i in $images) {
 		$f = Join-Path $workDir $i.File

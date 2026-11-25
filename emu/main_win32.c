@@ -280,7 +280,7 @@ int WINAPI WinMain(HINSTANCE hi, HINSTANCE hp, LPSTR cmd, int show) {
     static char modpath[MAX_PATH]; { GetModuleFileNameA(0, modpath, MAX_PATH); char *s = strrchr(modpath, '\\'); if (s) s[1] = 0; strncat(modpath, "ph_game.dll", MAX_PATH - strlen(modpath) - 1); }
     if (getenv("PH_BUILDER_DUMP")) {       /* builder: run the game headless on the interpreter and dump the RAM of both CPUs */
         EmuConfig bc = { 0 }; bc.rom = rom; bc.hleboot = 1; bc.idle_skip = 1; bc.stop_cpu = -1; bc.prof_cpu = -1;
-        if (emu_init(&bc)) return 2;
+        { int er = emu_init(&bc); if (er) return er == HIKARU_ERR_BIOS ? 4 : er == HIKARU_ERR_GAME ? 5 : 2; }   /* 4: no BIOS, 5: no game program */
         for (int f = 0; f < 3000; f++) if (emu_run_frame() < 0) break;
         return emu_builder_dump(getenv("PH_BUILDER_DUMP")) ? 3 : 0;
     }
@@ -297,7 +297,12 @@ int WINAPI WinMain(HINSTANCE hi, HINSTANCE hp, LPSTR cmd, int show) {
     c.rom = rom; c.hleboot = 1; c.aot = 1; c.idle_skip = 1; c.stop_cpu = -1; c.prof_cpu = -1;
     if (GetFileAttributesA(modpath) != INVALID_FILE_ATTRIBUTES) c.module = modpath;
     c.logpath = getenv("PH_LOG") ? "hikaru.log" : 0;
-    emu_init(&c);
+    { int er = emu_init(&c); if (er) {
+        MessageBoxW(hwnd, er == HIKARU_ERR_BIOS ? T2(L"Falta la BIOS de Hikaru.\nTu pharrier.zip no la incluye (romset partido de MAME): copia también hikaru.zip en la carpeta 'roms' (o junto al .exe).",
+                                                     L"The Hikaru BIOS is missing.\nYour pharrier.zip does not include it (MAME split set): copy hikaru.zip to the 'roms' folder (or next to the .exe) too.")
+                        : er == HIKARU_ERR_GAME ? T2(L"A pharrier.zip le faltan archivos del juego (epr-23565a / epr-23566a).", L"pharrier.zip is missing game files (epr-23565a / epr-23566a).")
+                        : T2(L"No se pudo cargar la ROM.", L"The ROM could not be loaded."), L"Planet Harriers - Recomp", MB_ICONERROR);
+        return 1; } }
     nv_load();
     VkrConfig vc = { 0 }; vc.scale = getenv("PH_SCALE") ? atoi(getenv("PH_SCALE")) : g_set.scale; vc.vsync = 0; vc.wide = g_set.wide; vc.msaa = g_set.msaa;
     vc.win32_hinstance = hi; vc.win32_hwnd = hwnd;

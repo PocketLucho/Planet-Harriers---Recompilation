@@ -107,7 +107,7 @@ void emu_dump_regs(Cpu *c) {
 int emu_init(const EmuConfig *cfg) {
     C = *cfg;
     sh4_init_tables();
-    hikaru_init(&M, C.rom);
+    int r = hikaru_init(&M, C.rom); if (r) return r;
     M.log = C.logpath ? fopen(C.logpath, "w") : 0;
     for (int i = 0; i < 2; i++) sh4_reset(&M.cpu[i]);
     g_blk_ram[0] = M.ram[0]; g_blk_ram[1] = M.ram[1]; g_blk_ram_mask = 0x01ffffff; g_blk_log = M.log;
