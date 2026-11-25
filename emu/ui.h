@@ -6,6 +6,7 @@
 
 typedef struct {
     int scale, wide, msaa, fullscreen;          /* video */
+    int pillarbox;                              /* widescreen: black sides on full-screen 4:3 pictures (title screen) */
     int stick_speed, pad_mode, invert_y;        /* controls: key stick speed 1..10, gamepad on/off, up/down swapped */
     int lang;                                   /* 0 auto, 1 Spanish, 2 English */
     int region;                                 /* 0 Japan, 1 USA, 2 Export, 3 Australia, 4 Korea */

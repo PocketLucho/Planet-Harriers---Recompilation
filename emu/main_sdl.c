@@ -34,7 +34,7 @@ enum { ACT_UP, ACT_DOWN, ACT_LEFT, ACT_RIGHT, ACT_SHOT, ACT_MISSILE, ACT_BOMB, A
        ACT_START, ACT_COIN, ACT_TEST, ACT_SERVICE, ACT_PAUSE, ACT_N };
 static const char *act_names[ACT_N] = { "up", "down", "left", "right", "shot", "missile", "bomb", "view_left", "view_right",
     "start", "coin", "test", "service", "pause" };
-static struct { int scale, wide, msaa, fullscreen, stick_speed, pad_mode, invert_y, lang, launcher; int keys[ACT_N]; } S;
+static struct { int scale, wide, pillarbox, msaa, fullscreen, stick_speed, pad_mode, invert_y, lang, launcher; int keys[ACT_N]; } S;
 /* interface language: 0 = from the environment (LANG / LC_ALL starting with "es" = Spanish), 1 Spanish, 2 English */
 static int lang_en(void) {
     if (S.lang == 1) return 0;
@@ -46,7 +46,7 @@ static int lang_en(void) {
 static char cfg_dir[PATH_MAX];
 
 static void settings_defaults(void) {
-    S.scale = 2; S.wide = getenv("SteamDeck") != 0; S.msaa = getenv("SteamDeck") ? 2 : 1; S.fullscreen = 0; S.stick_speed = 5; S.pad_mode = 1; S.invert_y = 0; S.launcher = 1;
+    S.scale = 2; S.wide = getenv("SteamDeck") != 0; S.pillarbox = 1; S.msaa = getenv("SteamDeck") ? 2 : 1; S.fullscreen = 0; S.stick_speed = 5; S.pad_mode = 1; S.invert_y = 0; S.launcher = 1;
     int k[ACT_N] = { SDL_SCANCODE_UP, SDL_SCANCODE_DOWN, SDL_SCANCODE_LEFT, SDL_SCANCODE_RIGHT, SDL_SCANCODE_Z, SDL_SCANCODE_X,
                      SDL_SCANCODE_C, SDL_SCANCODE_A, SDL_SCANCODE_S, SDL_SCANCODE_1, SDL_SCANCODE_5, SDL_SCANCODE_F2, SDL_SCANCODE_F1, SDL_SCANCODE_P };
     memcpy(S.keys, k, sizeof k);
@@ -71,7 +71,7 @@ static void settings_load(void) {
     char line[256];
     while (fgets(line, sizeof line, f)) {
         char key[64]; int v; if (sscanf(line, " %63[a-z_] = %d", key, &v) != 2) continue;
-        if (!strcmp(key, "scale")) S.scale = v; else if (!strcmp(key, "widescreen")) S.wide = !!v;
+        if (!strcmp(key, "scale")) S.scale = v; else if (!strcmp(key, "widescreen")) S.wide = !!v; else if (!strcmp(key, "clean_edges")) S.pillarbox = !!v;
         else if (!strcmp(key, "msaa")) S.msaa = v; else if (!strcmp(key, "fullscreen")) S.fullscreen = !!v;
         else if (!strcmp(key, "stick_speed")) S.stick_speed = v; else if (!strcmp(key, "gamepad")) S.pad_mode = !!v; else if (!strcmp(key, "invert_y")) S.invert_y = !!v; else if (!strcmp(key, "language")) S.lang = v; else if (!strcmp(key, "launcher")) S.launcher = !!v;
         else for (int i = 0; i < ACT_N; i++) if (!strcmp(key, act_names[i]) && v > 0 && v < SDL_NUM_SCANCODES) S.keys[i] = v;
@@ -85,9 +85,9 @@ static void settings_load(void) {
 static void settings_save(void) {
     char p[PATH_MAX + 32]; snprintf(p, sizeof p, "%s/pharrier.ini", cfg_dir);
     FILE *f = fopen(p, "w"); if (!f) return;
-    fprintf(f, "; Planet Harriers Recomp (Linux) - opciones (F10 / L3+R3)\n[video]\nscale = %d\nwidescreen = %d\nmsaa = %d\nfullscreen = %d\n\n"
+    fprintf(f, "; Planet Harriers Recomp (Linux) - opciones (F10 / L3+R3)\n[video]\nscale = %d\nwidescreen = %d\n; clean_edges (widescreen): 1 = black bars beside 4:3-only screens and full-width cutscene bars, 0 = stretched edges\nclean_edges = %d\nmsaa = %d\nfullscreen = %d\n\n"
                "launcher = %d\n\n[controles]\n; stick speed (keys) 1..10; gamepad: 0 off, 1 on; invert_y: 1 = up/down swapped; language: 0 auto, 1 es, 2 en\nstick_speed = %d\ngamepad = %d\ninvert_y = %d\nlanguage = %d\n\n"
-               "[keys]\n; SDL scancodes (https://wiki.libsdl.org/SDL2/SDL_Scancode)\n", S.scale, S.wide, S.msaa, S.fullscreen, S.launcher, S.stick_speed, S.pad_mode, S.invert_y, S.lang);
+               "[keys]\n; SDL scancodes (https://wiki.libsdl.org/SDL2/SDL_Scancode)\n", S.scale, S.wide, S.pillarbox, S.msaa, S.fullscreen, S.launcher, S.stick_speed, S.pad_mode, S.invert_y, S.lang);
     for (int i = 0; i < ACT_N; i++) fprintf(f, "%s = %d\n", act_names[i], S.keys[i]);
     fclose(f);
 }
@@ -184,7 +184,7 @@ static const char *bind_es[10] = { "Disparo", "Misil", "Bomba", "Vista izquierda
 static const char *bind_en[10] = { "Shot", "Missile", "Bomb", "View left", "View right", "Coin", "Start", "Test", "Service", "Pause" };
 static const int bind_act_id[10] = { ACT_SHOT, ACT_MISSILE, ACT_BOMB, ACT_VR_L, ACT_VR_R, ACT_COIN, ACT_START, ACT_TEST, ACT_SERVICE, ACT_PAUSE };
 static void ui_sync_in(void) {
-    uo.scale = S.scale; uo.wide = S.wide; uo.msaa = S.msaa; uo.fullscreen = fullscreen; uo.stick_speed = S.stick_speed;
+    uo.scale = S.scale; uo.wide = S.wide; uo.pillarbox = S.pillarbox; uo.msaa = S.msaa; uo.fullscreen = fullscreen; uo.stick_speed = S.stick_speed;
     uo.pad_mode = S.pad_mode; uo.invert_y = S.invert_y; uo.lang = S.lang; uo.region = emu_region(); uo.show_launcher = S.launcher;
     ui_info.lang_en = lang_en; ui_info.gpu = vkr_device_name(); ui_info.blocks = emu_block_count(); ui_info.msaa_gpu = vkr_msaa();
     ui_info.pad_name = pad ? SDL_GameControllerName(pad) : 0;
@@ -199,7 +199,7 @@ static void ui_sync_in(void) {
 static void ui_show(int screen) { ui_sync_in(); ui_open(screen, &uo, &ui_info); }
 static void ui_apply(int r) {   /* options changed in the menu -> settings, renderer, window */
     S.stick_speed = uo.stick_speed; S.pad_mode = uo.pad_mode; S.invert_y = uo.invert_y; S.lang = uo.lang; S.launcher = uo.show_launcher;
-    if (r == UI_VIDEO) { S.scale = uo.scale; S.wide = uo.wide; S.msaa = uo.msaa; vkr_reconfigure(S.scale, S.wide, S.msaa); ui_info.msaa_gpu = vkr_msaa(); }
+    if (r == UI_VIDEO) { S.scale = uo.scale; S.wide = uo.wide; S.pillarbox = uo.pillarbox; vkr_set_pillarbox(S.pillarbox); S.msaa = uo.msaa; vkr_reconfigure(S.scale, S.wide, S.msaa); ui_info.msaa_gpu = vkr_msaa(); }
     if (r == UI_FULLSCREEN) { S.fullscreen = uo.fullscreen; set_fullscreen(S.fullscreen); }
     if (uo.region != emu_region()) emu_set_region(uo.region);   /* before the game starts: the BIOS reads it at boot */
     settings_save();
@@ -300,6 +300,7 @@ int main(int argc, char **argv) {
     vc.inst_ext = ext; vc.n_inst_ext = ne; vc.create_surface = make_surface; vc.surface_user = win;
     update_size();
     if (gfx_vk_start(&vc)) { SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "Planet Harriers - Recomp", T2("No se pudo inicializar Vulkan.", "Vulkan could not be initialised."), win); return 1; }
+    vkr_set_pillarbox(S.pillarbox);
     update_size();
     if (S.fullscreen || getenv("SteamDeck")) { S.fullscreen = 1; set_fullscreen(1); }
     g_vk_layer_hook = layer_hook;

@@ -203,7 +203,7 @@ static void key_name(int vk, char *out, int n) {
     if (!GetKeyNameTextA(lp, out, n)) snprintf(out, n, "0x%02X", vk);
 }
 static void ui_show(int screen) {
-    uo.scale = g_set.scale; uo.wide = g_set.wide; uo.msaa = g_set.msaa; uo.fullscreen = fullscreen; uo.stick_speed = g_set.stick_speed;
+    uo.scale = g_set.scale; uo.wide = g_set.wide; uo.pillarbox = g_set.pillarbox; uo.msaa = g_set.msaa; uo.fullscreen = fullscreen; uo.stick_speed = g_set.stick_speed;
     uo.pad_mode = g_set.pad_mode; uo.invert_y = g_set.invert_y; uo.lang = g_set.lang; uo.region = emu_region(); uo.show_launcher = g_set.launcher;
     ui_info.version = PH_VERSION; ui_info.platform = "Windows"; ui_info.rom = rom_name; ui_info.lang_en = ph_lang_en;
     snprintf(gpu_name, sizeof gpu_name, "%s", vkr_device_name()); ui_info.gpu = gpu_name;
@@ -215,7 +215,7 @@ static void ui_show(int screen) {
 }
 static void ui_apply(int r) {
     g_set.stick_speed = uo.stick_speed; g_set.pad_mode = uo.pad_mode; g_set.invert_y = uo.invert_y; g_set.lang = uo.lang; g_set.launcher = uo.show_launcher;
-    if (r == UI_VIDEO) { g_set.scale = uo.scale; g_set.wide = uo.wide; g_set.msaa = uo.msaa; vkr_reconfigure(g_set.scale, g_set.wide, g_set.msaa); ui_info.msaa_gpu = vkr_msaa(); }
+    if (r == UI_VIDEO) { g_set.scale = uo.scale; g_set.wide = uo.wide; g_set.pillarbox = uo.pillarbox; vkr_set_pillarbox(g_set.pillarbox); g_set.msaa = uo.msaa; vkr_reconfigure(g_set.scale, g_set.wide, g_set.msaa); ui_info.msaa_gpu = vkr_msaa(); }
     if (r == UI_FULLSCREEN && !!uo.fullscreen != !!fullscreen) toggle_fullscreen();
     g_set.fullscreen = fullscreen;
     if (uo.region != emu_region()) { emu_set_region(uo.region); g_set.region = uo.region; }
@@ -311,6 +311,7 @@ int WINAPI WinMain(HINSTANCE hi, HINSTANCE hp, LPSTR cmd, int show) {
         MessageBoxW(hwnd, T2(L"No se pudo inicializar Vulkan.\nActualiza el driver de la tarjeta gráfica.", L"Vulkan could not be initialised.\nUpdate your graphics driver."), L"Planet Harriers - Recomp", MB_ICONERROR);
         return 1;
     }
+    vkr_set_pillarbox(g_set.pillarbox);
     { RECT cr; GetClientRect(hwnd, &cr); vkr_resize(cr.right, cr.bottom); }
     if (g_set.fullscreen) toggle_fullscreen();
     { const char *b = strrchr(rom, '\\'); if (!b) b = strrchr(rom, '/'); snprintf(rom_name, sizeof rom_name, "%s", b ? b + 1 : rom); }

@@ -26,6 +26,7 @@ static void vk_out(const CpState *cp, const uint8_t *texram, int *dirty, uint64_
                   if (!want) return; }   /* test mode: only render the listed frames (TEXRAM stays dirty until then) */
     if (*dirty) { vkr_texram_upload(texram); *dirty = 0; }
     g_gfx_xscale = vkr_is_wide() ? 0.75f : 1.0f;
+    g_gfx_clean_edges = vkr_pillarbox();
     gfx_build(&gf, cp);
     { static u16 *lay; if (!lay) lay = malloc(640 * 960 * 2); uint32_t ena = (uint32_t)gpu_layers(lay), dir = (uint32_t)gpu_layers_direct();
       if (g_vk_layer_hook) g_vk_layer_hook(lay, &ena, &dir);

@@ -27,7 +27,7 @@ static void apply_inputs(void) {
 int main(int argc, char **argv) {
     EmuConfig c = { 0 }; const char *builder_dump = 0;
     c.rom = "../rom"; c.logpath = 0; c.pagelog = 1; c.stop_cpu = -1; c.prof_cpu = -1; c.idle_skip = 1;
-    u64 maxcyc = 200000000ULL; const char *wavpath = 0; FILE *wav = 0; uint32_t aud_r = 0, wav_n = 0; int use_vk = 0, vk_scale = 1, vk_wide = 0, vk_msaa = 1, dumps = 1; const char *nvpath = 0; int region = -1;
+    u64 maxcyc = 200000000ULL; const char *wavpath = 0; FILE *wav = 0; uint32_t aud_r = 0, wav_n = 0; int use_vk = 0, vk_scale = 1, vk_wide = 0, vk_pillar = 0, vk_msaa = 1, dumps = 1; const char *nvpath = 0; int region = -1;
     for (int i = 1; i < argc; i++) {
         if (!strcmp(argv[i], "-rom")) c.rom = argv[++i];
         else if (!strcmp(argv[i], "-log")) c.logpath = argv[++i];
@@ -41,6 +41,7 @@ int main(int argc, char **argv) {
         else if (!strcmp(argv[i], "-vk")) use_vk = 1;
         else if (!strcmp(argv[i], "-vkscale")) vk_scale = atoi(argv[++i]);
         else if (!strcmp(argv[i], "-vkwide")) vk_wide = 1;
+        else if (!strcmp(argv[i], "-vkpillar")) vk_pillar = 1;
         else if (!strcmp(argv[i], "-vkmsaa")) vk_msaa = atoi(argv[++i]);
         else if (!strcmp(argv[i], "-nv")) nvpath = argv[++i];
         else if (!strcmp(argv[i], "-verify")) c.verify = 1;
@@ -67,7 +68,7 @@ int main(int argc, char **argv) {
     if (nvpath) fprintf(stderr, "nvram %s: %s\n", nvpath, emu_nv_load(nvpath) == 0 ? "loaded" : "not found (fresh)");
     if (region >= 0) emu_set_region(region);
 #ifdef HAVE_VULKAN
-    if (use_vk) { VkrConfig vc = { 0 }; vc.headless = 1; vc.scale = vk_scale; vc.wide = vk_wide; vc.msaa = vk_msaa; if (gfx_vk_start(&vc)) fprintf(stderr, "Vulkan unavailable, continuing without it\n"); }
+    if (use_vk) { VkrConfig vc = { 0 }; vc.headless = 1; vc.scale = vk_scale; vc.wide = vk_wide; vc.msaa = vk_msaa; if (gfx_vk_start(&vc)) fprintf(stderr, "Vulkan unavailable, continuing without it\n"); else vkr_set_pillarbox(vk_pillar); }
 #else
     if (use_vk) fprintf(stderr, "this build has no Vulkan renderer\n");
 #endif

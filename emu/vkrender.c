@@ -39,6 +39,7 @@ static struct {
     /* 2D layers: 640x960 R16_UINT */
     VkImage lay; VkDeviceMemory laymem; VkImageView layview; VkBuffer laystage; VkDeviceMemory laystagemem; void *laystagemap;
     int lay_dirty, lay_init; uint32_t lay_ena, lay_direct;
+    int pillarbox, lay_fullscreen;    /* widescreen: black sides while a full-screen 2D picture is on top of the 3D */
     VkPipeline pipe_overlay_behind;
     /* menus: premultiplied RGBA canvas (UI_W x UI_H, the used part uw x uh), drawn last over everything */
     VkImage ui; VkDeviceMemory uimem; VkImageView uiview; VkBuffer uistage; VkDeviceMemory uistagemem; void *uistagemap;
@@ -404,11 +405,26 @@ void vkr_texram_upload(const uint8_t *hw) {
     V.tex_dirty = 1;
 }
 
+/* a layer drawn over the 3D whose left and right columns are opaque (almost) top to bottom is a full-screen 4:3
+ * picture (title screen): its edge columns would otherwise be stretched over the 16:9 sides */
+static int layer_fullscreen(const uint16_t *lay640x960, uint32_t ena, uint32_t direct) {
+    for (int l = 0; l < 2; l++) {
+        if (!(ena & direct & (1u << l))) continue;
+        const uint16_t *L = lay640x960 + 640 * 480 * l; int n = 0;
+        for (int y = 0; y < 480; y++) n += (L[y * 640] >> 15) & (L[y * 640 + 639] >> 15);
+        if (n >= 470) return 1;
+    }
+    return 0;
+}
+
 void vkr_layers_upload(const uint16_t *lay640x960, uint32_t ena, uint32_t direct) {
     vkr_wait();
     V.lay_ena = ena; V.lay_direct = direct;
+    V.lay_fullscreen = ena && V.wide && V.pillarbox && layer_fullscreen(lay640x960, ena, direct);
     if (ena) { memcpy(V.laystagemap, lay640x960, 640 * 960 * 2); V.lay_dirty = 1; }
 }
+void vkr_set_pillarbox(int on) { V.pillarbox = on; }
+int vkr_pillarbox(void) { return V.pillarbox; }
 
 void vkr_ui_canvas(int *w, int *h) { *w = V.wide ? 1280 : 960; *h = 720; }
 void vkr_ui_upload(const uint32_t *rgba, int w, int h) {
@@ -537,6 +553,15 @@ void vkr_draw(const GfxFrame *f) {
             vkCmdBindPipeline(V.cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pass ? V.pipe_overlay : V.pipe_overlay_behind);
             vkCmdPushConstants(V.cmd, V.pl, VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof pc, &pc);
             vkCmdDraw(V.cmd, 3, 1, 0, 0);
+        }
+    }
+    if (V.lay_fullscreen && V.lay_ena) {   /* pillarbox: black outside the centred 4:3 area */
+        uint32_t side = (uint32_t)((V.w - 640 * V.cfg.scale) / 2);
+        if (side > 0) {
+            VkClearAttachment ca = { VK_IMAGE_ASPECT_COLOR_BIT, 0, { .color = { { 0, 0, 0, 1 } } } };
+            VkClearRect cr[2] = { { { { 0, 0 }, { side, (uint32_t)V.h } }, 0, 1 },
+                                  { { { (int32_t)(V.w - side), 0 }, { side, (uint32_t)V.h } }, 0, 1 } };
+            vkCmdClearAttachments(V.cmd, 1, &ca, 2, cr);
         }
     }
     if (V.ui_visible && V.ui_init) {

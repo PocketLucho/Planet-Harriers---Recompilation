@@ -5,10 +5,18 @@
 #include "hikaru_gfx.h"
 #include "gpu.h"
 
-float g_gfx_xscale = 1.0f;   /* 0.75 in widescreen: the 4:3 image covers the central 3/4, more world at the sides */
+float g_gfx_xscale = 1.0f;
+int g_gfx_clean_edges = 0;   /* widescreen "clean edges" option: also catch flat quads whose z differ by rounding */   /* 0.75 in widescreen: the 4:3 image covers the central 3/4, more world at the sides */
 
 static void reserve(GfxFrame *f, int n) {
     if (f->nv + n > f->cap) { f->cap = (f->nv + n) * 2 + 1024; f->v = realloc(f->v, f->cap * sizeof(GfxVertex)); }
+}
+
+/* the three vertices at the same depth: screen-aligned quad. Rounding error allowed (the letterbox bars of the
+ * intro cutscene have z = -0.199999988 / -0.200000018 and were missed by an exact compare). */
+static int flat_z(const CpTri *t) {
+    float z0 = t->v[0].pos[2], tol = g_gfx_clean_edges ? fabsf(z0) * 1e-5f + 1e-7f : 0.0f;
+    return fabsf(t->v[1].pos[2] - z0) <= tol && fabsf(t->v[2].pos[2] - z0) <= tol;
 }
 
 static void make_vertex(GfxVertex *o, const CpTri *t, const CpVert *v, const GfxShade *sh, uint32_t texw) {
@@ -17,9 +25,9 @@ static void make_vertex(GfxVertex *o, const CpTri *t, const CpVert *v, const Gfx
     float sx = vp->off_x + v->pos[0] * vp->f / (w != 0 ? w : 1e-6f);
     float sy = vp->off_y - v->pos[1] * vp->f / (w != 0 ? w : 1e-6f);
     float xn = (sx / 320.0f - 1.0f) * g_gfx_xscale, yn = sy / 240.0f - 1.0f;
-    /* widescreen: flat untextured screen quads that overflow the 4:3 edges (letterbox bars of RETIRED / FINISHED)
-       reach the edges of the 16:9 picture */
-    if (g_gfx_xscale < 1.0f && !((t->mat.flags881 >> 3) & 1) && t->v[0].pos[2] == t->v[1].pos[2] && t->v[1].pos[2] == t->v[2].pos[2]) {
+    /* widescreen: flat untextured screen quads that overflow the 4:3 edges (letterbox bars of RETIRED / FINISHED and
+       of the cutscenes) reach the edges of the 16:9 picture */
+    if (g_gfx_xscale < 1.0f && !((t->mat.flags881 >> 3) & 1) && flat_z(t)) {
         if (sx <= 0.0f) xn = -1.0f; else if (sx >= 640.0f) xn = 1.0f;
     }
     o->clip[0] = xn * w; o->clip[1] = yn * w; o->clip[2] = GFX_NEAR; o->clip[3] = w;

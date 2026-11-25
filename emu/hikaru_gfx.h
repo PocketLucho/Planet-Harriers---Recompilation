@@ -40,6 +40,7 @@ typedef struct {
 } GfxFrame;
 
 #define GFX_NEAR 0.01f
+extern int g_gfx_clean_edges;
 extern float g_gfx_xscale;
 void gfx_build(GfxFrame *f, const CpState *s);
 /* per-vertex lighting + fog of vertex k (shared with the software renderer) */
