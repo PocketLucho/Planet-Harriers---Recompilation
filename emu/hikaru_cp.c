@@ -105,6 +105,9 @@ static void emit_tri(CpState *s) {
             xform_m(em[slot], s->tmp[order[i]].pos, t->v[i].pos, 0);
             xform_m(em[slot], s->tmp[order[i]].nrm, t->v[i].nrm, 1);
         }
+        {   float (*m)[4] = em[s->tmp[order[0]].mtx & 1];
+            float det = m[0][0] * (m[1][1] * m[2][2] - m[1][2] * m[2][1]) - m[0][1] * (m[1][0] * m[2][2] - m[1][2] * m[2][0]) + m[0][2] * (m[1][0] * m[2][1] - m[1][1] * m[2][0]);
+            t->mirrored = det < 0; }
         t->view = s->vp_scratch; t->mat = s->mat_scratch; t->tex = s->tex_scratch;
         t->polytype = s->polytype; t->polyalpha = s->polyalpha; t->pattern = s->pattern; t->info = info; t->src_pc = s->pc; t->ls = s->cur_ls;
     }

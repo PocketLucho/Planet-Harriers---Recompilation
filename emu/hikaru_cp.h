@@ -58,6 +58,7 @@ typedef struct {
     CpTexhead tex;
     int polytype; float polyalpha;
     uint8_t pattern;
+    uint8_t mirrored;              /* drawn with a modelview of negative determinant (reflections): facing is reversed */
     uint32_t info, src_pc;
     int ls;                        /* index into CpState.ls_frame (lightset active), -1 = none */
 } CpTri;

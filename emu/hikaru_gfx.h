@@ -41,6 +41,9 @@ typedef struct {
 
 #define GFX_NEAR 0.01f
 extern int g_gfx_clean_edges;
+/* Back-face culling of opaque polygons (set by the frontend; off = both faces drawn, as before). */
+extern int g_gfx_backface_cull;
+int gfx_tri_culled(const CpTri *t);
 extern float g_gfx_xscale;
 void gfx_build(GfxFrame *f, const CpState *s);
 /* per-vertex lighting + fog of vertex k (shared with the software renderer) */

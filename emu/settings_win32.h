@@ -16,6 +16,7 @@ typedef struct {
     int scale;          /* internal resolution multiplier, 1..8 */
     int wide;           /* 16:9 */
     int pillarbox;      /* widescreen: black side bars on 4:3-only screens (title) instead of stretched edges */
+    int cull;           /* back-face culling of opaque polygons */
     int msaa;           /* antialiasing samples 1 (off), 2, 4, 8 */
     int fullscreen;     /* start in fullscreen (F11 toggles and remembers) */
     int stick_speed;    /* how fast the keys move the stick, 1..10 */

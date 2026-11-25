@@ -42,6 +42,7 @@ int main(int argc, char **argv) {
         else if (!strcmp(argv[i], "-vkscale")) vk_scale = atoi(argv[++i]);
         else if (!strcmp(argv[i], "-vkwide")) vk_wide = 1;
         else if (!strcmp(argv[i], "-vkpillar")) vk_pillar = 1;
+        else if (!strcmp(argv[i], "-cull")) { extern int g_gfx_backface_cull; g_gfx_backface_cull = 1; }
         else if (!strcmp(argv[i], "-vkmsaa")) vk_msaa = atoi(argv[++i]);
         else if (!strcmp(argv[i], "-nv")) nvpath = argv[++i];
         else if (!strcmp(argv[i], "-verify")) c.verify = 1;

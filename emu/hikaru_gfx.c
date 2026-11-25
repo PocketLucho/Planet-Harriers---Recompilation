@@ -8,6 +8,22 @@
 float g_gfx_xscale = 1.0f;
 int g_gfx_clean_edges = 0;   /* widescreen "clean edges" option: also catch flat quads whose z differ by rounding */   /* 0.75 in widescreen: the 4:3 image covers the central 3/4, more world at the sides */
 
+int g_gfx_backface_cull = 0;
+
+/* Back-face culling. emit_tri() has already put every triangle in the order its winding bit asks for, so the
+ * sign of v0 . (v1 x v2) in eye space says which side faces the eye (valid also for triangles that cross the
+ * eye plane). Only opaque polygons (type 3) are culled: the board evidently skips their far side - the camera of
+ * the character-select intro sits against the room wall and wall fixtures 0.2 units away would otherwise fill
+ * the screen with their backs for a frame or two at every pan (grey flashes) - while translucent, punch-through
+ * and background polygons are needed from both sides (shot trails, glass). A mirrored modelview (reflections)
+ * reverses the facing. */
+int gfx_tri_culled(const CpTri *t) {
+    if (!g_gfx_backface_cull || t->polytype != 3 || t->mat.blend == 2) return 0;
+    const float *a = t->v[0].pos, *b = t->v[1].pos, *c = t->v[2].pos;
+    float d = a[0] * (b[1] * c[2] - b[2] * c[1]) - a[1] * (b[0] * c[2] - b[2] * c[0]) + a[2] * (b[0] * c[1] - b[1] * c[0]);
+    return t->mirrored ? d < 0 : d > 0;
+}
+
 static void reserve(GfxFrame *f, int n) {
     if (f->nv + n > f->cap) { f->cap = (f->nv + n) * 2 + 1024; f->v = realloc(f->v, f->cap * sizeof(GfxVertex)); }
 }
@@ -223,6 +239,7 @@ void gfx_build(GfxFrame *f, const CpState *s) {
             int blended = t->polytype == 0xd || t->polytype == 0xb, shadow = t->polytype == 5 || t->polytype == 7;
             int translucent = blended || add;
             if ((t->view.dfunc & 7) != grp || translucent != pass) continue;
+            if (gfx_tri_culled(t)) continue;
             { static int sk = -2; if (sk == -2) { const char *e = getenv("PH_SKIPPASS"); sk = e ? atoi(e) : -1; } if (sk == pass) continue; }
             { static float nc = -2; if (nc == -2) { const char *e = getenv("PH_NEARCULL"); nc = e ? (float)atof(e) : -1; }
               if (nc >= 0 && (-t->v[0].pos[2] < nc || -t->v[1].pos[2] < nc || -t->v[2].pos[2] < nc)) continue; }

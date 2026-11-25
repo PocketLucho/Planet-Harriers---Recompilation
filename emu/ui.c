@@ -170,7 +170,7 @@ static int en(void) { return I && I->lang_en ? I->lang_en() : 0; }
 enum { P_GAME, P_VIDEO, P_CONTROLS, P_SYSTEM, P_N };
 enum { K_ACTION, K_CHOICE, K_TOGGLE, K_SLIDER };
 typedef struct { int id, kind; } Row;
-enum { R_CONTINUE, R_RESET, R_SHOT, R_LAUNCHER, R_QUIT, R_SCALE, R_MSAA, R_WIDE, R_PILLAR, R_FULL, R_PAD, R_SPEED, R_INVY, R_REGION, R_LANG, R_SHOWL };
+enum { R_CONTINUE, R_RESET, R_SHOT, R_LAUNCHER, R_QUIT, R_SCALE, R_MSAA, R_WIDE, R_PILLAR, R_CULL, R_FULL, R_PAD, R_SPEED, R_INVY, R_REGION, R_LANG, R_SHOWL };
 
 static int first_page(void) { return screen == UI_SCREEN_PAUSE ? P_GAME : P_VIDEO; }
 static int rows(int p, Row *r) {
@@ -180,7 +180,7 @@ static int rows(int p, Row *r) {
         r[n++] = (Row){ R_CONTINUE, K_ACTION }; r[n++] = (Row){ R_RESET, K_ACTION }; r[n++] = (Row){ R_SHOT, K_ACTION };
         r[n++] = (Row){ R_LAUNCHER, K_ACTION }; r[n++] = (Row){ R_QUIT, K_ACTION }; break;
     case P_VIDEO:
-        r[n++] = (Row){ R_SCALE, K_CHOICE }; r[n++] = (Row){ R_MSAA, K_CHOICE }; r[n++] = (Row){ R_WIDE, K_TOGGLE }; r[n++] = (Row){ R_PILLAR, K_TOGGLE }; r[n++] = (Row){ R_FULL, K_TOGGLE }; break;
+        r[n++] = (Row){ R_SCALE, K_CHOICE }; r[n++] = (Row){ R_MSAA, K_CHOICE }; r[n++] = (Row){ R_WIDE, K_TOGGLE }; r[n++] = (Row){ R_PILLAR, K_TOGGLE }; r[n++] = (Row){ R_CULL, K_TOGGLE }; r[n++] = (Row){ R_FULL, K_TOGGLE }; break;
     case P_CONTROLS:
         r[n++] = (Row){ R_PAD, K_TOGGLE }; r[n++] = (Row){ R_SPEED, K_SLIDER }; r[n++] = (Row){ R_INVY, K_TOGGLE }; break;
     case P_SYSTEM:
@@ -203,6 +203,7 @@ static const char *row_label(int id) {
     case R_MSAA: return T("Antialiasing (MSAA)", "Antialiasing (MSAA)");
     case R_WIDE: return T("Panorámico 16:9", "Widescreen 16:9");
     case R_PILLAR: return T("Bordes limpios en panorámico", "Clean widescreen edges");
+    case R_CULL: return T("Ocultar caras traseras", "Hide back faces");
     case R_FULL: return T("Pantalla completa", "Fullscreen");
     case R_PAD: return T("Mando", "Gamepad");
     case R_SPEED: return T("Velocidad de la palanca (teclas)", "Stick speed (keys)");
@@ -225,6 +226,8 @@ static const char *row_help(int id) {
     case R_WIDE: return T("Ensancha la vista 3D; los gráficos 2D quedan centrados.", "Widens the 3D view; the 2D graphics stay centred.");
     case R_PILLAR: return T("Bandas negras junto a pantallas solo 4:3 (título); franjas de cine a todo lo ancho.",
                             "Black bars beside 4:3-only screens (title); cutscene bars reach the edges.");
+    case R_CULL: return T("No dibuja el reverso de los polígonos opacos, como la placa. Evita destellos grises.",
+                          "Skips the far side of solid polygons, like the arcade board. Stops grey flashes.");
     case R_FULL: return T("También con F11 (o Alt+Intro en Windows).", "Also with F11 (or Alt+Enter on Windows).");
     case R_PAD: return T("Palanca izquierda o cruceta, A/RT disparo, X/B/LT misil, Y bomba, LB/RB vista.", "Left stick or d-pad, A/RT shot, X/B/LT missile, Y bomb, LB/RB view.");
     case R_SPEED: return T("Con teclado la palanca analógica se mueve poco a poco.", "With the keyboard the analog stick moves gradually.");
@@ -253,7 +256,7 @@ static void row_value(int id, char *v, int n) {
     }
 }
 static int toggle_on(int id) {
-    switch (id) { case R_WIDE: return O->wide; case R_PILLAR: return O->pillarbox; case R_FULL: return O->fullscreen; case R_PAD: return O->pad_mode;
+    switch (id) { case R_WIDE: return O->wide; case R_PILLAR: return O->pillarbox; case R_CULL: return O->backface_cull; case R_FULL: return O->fullscreen; case R_PAD: return O->pad_mode;
                   case R_INVY: return O->invert_y; case R_SHOWL: return O->show_launcher; }
     return 0;
 }
@@ -275,6 +278,7 @@ static int change(int id, int d) {   /* d = -1 / +1 (0 = accept: toggles and cho
     case R_MSAA: { int m = msaa_step(O->msaa, fwd); if (!d && m == O->msaa) m = 1; O->msaa = m; return UI_VIDEO; }
     case R_WIDE: O->wide = d ? d > 0 : !O->wide; return UI_VIDEO;
     case R_PILLAR: O->pillarbox = d ? d > 0 : !O->pillarbox; return UI_VIDEO;
+    case R_CULL: O->backface_cull = d ? d > 0 : !O->backface_cull; return UI_VIDEO;
     case R_FULL: O->fullscreen = d ? d > 0 : !O->fullscreen; return UI_FULLSCREEN;
     case R_PAD: O->pad_mode = d ? d > 0 : !O->pad_mode; return UI_SAVE;
     case R_INVY: O->invert_y = d ? d > 0 : !O->invert_y; return UI_SAVE;

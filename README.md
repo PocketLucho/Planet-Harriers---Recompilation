@@ -47,7 +47,7 @@ from YOUR copy of the game: personal use only, do not distribute it.
 | Test / Service | F2 / F1 | |
 | Pause, options, fullscreen, screenshot, quit | P, F10, F11, F12, Esc | L3+R3 options (Linux) |
 
-Options: internal resolution 1x-8x, MSAA, 16:9 widescreen (optional clean edges: black bars beside 4:3-only screens such as the title, full-width cutscene bars), fullscreen, country (Japan, USA, Export,
+Options: internal resolution 1x-8x, MSAA, 16:9 widescreen (optional clean edges: black bars beside 4:3-only screens such as the title, full-width cutscene bars), back-face culling, fullscreen, country (Japan, USA, Export,
 Australia, Korea; Export by default, English text), stick speed with keys, invert up/down, interface
 language (Spanish / English).
 

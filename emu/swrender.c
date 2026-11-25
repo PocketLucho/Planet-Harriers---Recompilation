@@ -177,6 +177,7 @@ void sr_render(const CpState *s) {
         int add = t->mat.blend == 2, blended = t->polytype == 0xd || t->polytype == 0xb, shadow = t->polytype == 5 || t->polytype == 7;
         int translucent = blended || add;
         if ((t->view.dfunc & 7) != grp || translucent != pass) continue;
+        if (gfx_tri_culled(t)) continue;
         const CpViewport *vp = &t->view;
         float a[3], b[3], n[3];
         for (int k = 0; k < 3; k++) { a[k] = t->v[1].pos[k] - t->v[0].pos[k]; b[k] = t->v[2].pos[k] - t->v[0].pos[k]; }

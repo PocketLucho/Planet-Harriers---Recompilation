@@ -21,7 +21,7 @@ Menus
 Al arrancar sale el lanzador (Iniciar partida / Ajustes / Salir); se puede desactivar en
 Ajustes > Sistema. Durante la partida, Esc o F10 (o Back+Start / L3+R3 en el mando) abren el menu
 de pausa: Partida (continuar, reiniciar, captura, volver al lanzador, salir), Video (resolucion
-interna 1x-8x, MSAA, panoramico 16:9, bordes limpios en panoramico, pantalla completa), Controles (mando, velocidad de la
+interna 1x-8x, MSAA, panoramico 16:9, bordes limpios en panoramico, ocultar caras traseras, pantalla completa), Controles (mando, velocidad de la
 palanca con teclas, invertir arriba/abajo) y Sistema (pais, idioma, lanzador al iniciar).
 Con el mando: cruceta/stick para moverse, A aceptar, B volver, LB/RB cambiar de pestana.
 F9 abre la ventana para cambiar las teclas.
