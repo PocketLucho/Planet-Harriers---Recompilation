@@ -203,7 +203,7 @@ static void key_name(int vk, char *out, int n) {
     if (!GetKeyNameTextA(lp, out, n)) snprintf(out, n, "0x%02X", vk);
 }
 static void ui_show(int screen) {
-    uo.scale = g_set.scale; uo.wide = g_set.wide; uo.msaa = g_set.msaa; uo.fullscreen = fullscreen; uo.stick_speed = g_set.stick_speed;
+    uo.scale = g_set.scale; uo.wide = g_set.wide; uo.pillarbox = g_set.pillarbox; uo.backface_cull = g_set.cull; uo.msaa = g_set.msaa; uo.fullscreen = fullscreen; uo.stick_speed = g_set.stick_speed;
     uo.pad_mode = g_set.pad_mode; uo.invert_y = g_set.invert_y; uo.lang = g_set.lang; uo.region = emu_region(); uo.show_launcher = g_set.launcher;
     ui_info.version = PH_VERSION; ui_info.platform = "Windows"; ui_info.rom = rom_name; ui_info.lang_en = ph_lang_en;
     snprintf(gpu_name, sizeof gpu_name, "%s", vkr_device_name()); ui_info.gpu = gpu_name;
@@ -215,7 +215,7 @@ static void ui_show(int screen) {
 }
 static void ui_apply(int r) {
     g_set.stick_speed = uo.stick_speed; g_set.pad_mode = uo.pad_mode; g_set.invert_y = uo.invert_y; g_set.lang = uo.lang; g_set.launcher = uo.show_launcher;
-    if (r == UI_VIDEO) { g_set.scale = uo.scale; g_set.wide = uo.wide; g_set.msaa = uo.msaa; vkr_reconfigure(g_set.scale, g_set.wide, g_set.msaa); ui_info.msaa_gpu = vkr_msaa(); }
+    if (r == UI_VIDEO) { g_set.scale = uo.scale; g_set.wide = uo.wide; g_set.pillarbox = uo.pillarbox; vkr_set_pillarbox(g_set.pillarbox); g_set.cull = uo.backface_cull; g_gfx_backface_cull = g_set.cull; g_set.msaa = uo.msaa; vkr_reconfigure(g_set.scale, g_set.wide, g_set.msaa); ui_info.msaa_gpu = vkr_msaa(); }
     if (r == UI_FULLSCREEN && !!uo.fullscreen != !!fullscreen) toggle_fullscreen();
     g_set.fullscreen = fullscreen;
     if (uo.region != emu_region()) { emu_set_region(uo.region); g_set.region = uo.region; }
@@ -280,7 +280,7 @@ int WINAPI WinMain(HINSTANCE hi, HINSTANCE hp, LPSTR cmd, int show) {
     static char modpath[MAX_PATH]; { GetModuleFileNameA(0, modpath, MAX_PATH); char *s = strrchr(modpath, '\\'); if (s) s[1] = 0; strncat(modpath, "ph_game.dll", MAX_PATH - strlen(modpath) - 1); }
     if (getenv("PH_BUILDER_DUMP")) {       /* builder: run the game headless on the interpreter and dump the RAM of both CPUs */
         EmuConfig bc = { 0 }; bc.rom = rom; bc.hleboot = 1; bc.idle_skip = 1; bc.stop_cpu = -1; bc.prof_cpu = -1;
-        if (emu_init(&bc)) return 2;
+        { int er = emu_init(&bc); if (er) return er == HIKARU_ERR_BIOS ? 4 : er == HIKARU_ERR_GAME ? 5 : 2; }   /* 4: no BIOS, 5: no game program */
         for (int f = 0; f < 3000; f++) if (emu_run_frame() < 0) break;
         return emu_builder_dump(getenv("PH_BUILDER_DUMP")) ? 3 : 0;
     }
@@ -297,7 +297,12 @@ int WINAPI WinMain(HINSTANCE hi, HINSTANCE hp, LPSTR cmd, int show) {
     c.rom = rom; c.hleboot = 1; c.aot = 1; c.idle_skip = 1; c.stop_cpu = -1; c.prof_cpu = -1;
     if (GetFileAttributesA(modpath) != INVALID_FILE_ATTRIBUTES) c.module = modpath;
     c.logpath = getenv("PH_LOG") ? "hikaru.log" : 0;
-    emu_init(&c);
+    { int er = emu_init(&c); if (er) {
+        MessageBoxW(hwnd, er == HIKARU_ERR_BIOS ? T2(L"Falta la BIOS de Hikaru.\nTu pharrier.zip no la incluye (romset partido de MAME): copia también hikaru.zip en la carpeta 'roms' (o junto al .exe).",
+                                                     L"The Hikaru BIOS is missing.\nYour pharrier.zip does not include it (MAME split set): copy hikaru.zip to the 'roms' folder (or next to the .exe) too.")
+                        : er == HIKARU_ERR_GAME ? T2(L"A pharrier.zip le faltan archivos del juego (epr-23565a / epr-23566a).", L"pharrier.zip is missing game files (epr-23565a / epr-23566a).")
+                        : T2(L"No se pudo cargar la ROM.", L"The ROM could not be loaded."), L"Planet Harriers - Recomp", MB_ICONERROR);
+        return 1; } }
     nv_load();
     VkrConfig vc = { 0 }; vc.scale = getenv("PH_SCALE") ? atoi(getenv("PH_SCALE")) : g_set.scale; vc.vsync = 0; vc.wide = g_set.wide; vc.msaa = g_set.msaa;
     vc.win32_hinstance = hi; vc.win32_hwnd = hwnd;
@@ -306,6 +311,7 @@ int WINAPI WinMain(HINSTANCE hi, HINSTANCE hp, LPSTR cmd, int show) {
         MessageBoxW(hwnd, T2(L"No se pudo inicializar Vulkan.\nActualiza el driver de la tarjeta gráfica.", L"Vulkan could not be initialised.\nUpdate your graphics driver."), L"Planet Harriers - Recomp", MB_ICONERROR);
         return 1;
     }
+    vkr_set_pillarbox(g_set.pillarbox); g_gfx_backface_cull = g_set.cull;
     { RECT cr; GetClientRect(hwnd, &cr); vkr_resize(cr.right, cr.bottom); }
     if (g_set.fullscreen) toggle_fullscreen();
     { const char *b = strrchr(rom, '\\'); if (!b) b = strrchr(rom, '/'); snprintf(rom_name, sizeof rom_name, "%s", b ? b + 1 : rom); }

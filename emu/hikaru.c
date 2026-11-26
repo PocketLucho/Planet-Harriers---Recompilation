@@ -39,14 +39,22 @@ static u16 prot_ram_rd(u32 addr) {             /* hikaru.cpp prot_ram_r: 16-bit 
     return (u16)((v >> 8) | (v << 8));
 }
 
-void hikaru_init(Machine *m, const char *romdir) {
+int hikaru_init(Machine *m, const char *romdir) {
     memset(m, 0, sizeof *m);
     g_m = m;
-    if (rom_open(romdir)) exit(1);
+    if (rom_open(romdir)) return HIKARU_ERR_ROM;
     m->bios = xalloc(0x200000);
-    /* Hikaru BOOTROM: any of the three versions of the MAME set, newest first */
-    if (!loadfile(romdir, "epr-23400a.ic94", m->bios, 0x200000) && !loadfile(romdir, "epr-23400.ic94", m->bios, 0x200000))
-        loadfile(romdir, "epr-21904.ic94", m->bios, 0x200000);
+    /* Hikaru BOOTROM: any of the three versions of the MAME set, newest first. A MAME split set keeps it in
+       hikaru.zip (romzip.c looks there too). Without it the CPUs run zeroed memory forever: refuse to start. */
+    if (!loadfile(romdir, "epr-23400a.ic94", m->bios, 0x200000) && !loadfile(romdir, "epr-23400.ic94", m->bios, 0x200000)
+        && !loadfile(romdir, "epr-21904.ic94", m->bios, 0x200000)) {
+        fprintf(stderr, "Hikaru BIOS (epr-23400a/epr-23400/epr-21904.ic94) not found: put hikaru.zip next to the game zip\n");
+        return HIKARU_ERR_BIOS;
+    }
+    /* the game program (first EPROM pair) must be there too */
+    { u8 probe[4]; if (!loadfile(romdir, "epr-23565a.ic29", probe, 4) || !loadfile(romdir, "epr-23566a.ic30", probe, 4)) {
+        fprintf(stderr, "Planet Harriers program EPROMs (epr-23565a.ic29 / epr-23566a.ic30) not found\n");
+        return HIKARU_ERR_GAME; } }
     /* Planet Harriers ROM board: four pairs of 4 MB EPROMs, one pair per 16 MB page (10-13, each pair
        mirrored inside its page); eight pairs of 16 MB mask ROMs, 32 MB per pair, pages 20-2F. */
     m->user1 = xalloc(0x4000000);
@@ -81,6 +89,7 @@ void hikaru_init(Machine *m, const char *romdir) {
     mie_init(m);
     crypt5881_init(0x2912c68a, prot_ram_rd);   /* 315-5881 key of Planet Harriers (317-0297-COM) */
     for (int i = 0; i < 8; i++) g_input.analog[i] = 0x8000;
+    return 0;
 }
 
 /* ------------------------------------------------------------------ */

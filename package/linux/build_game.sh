@@ -56,7 +56,9 @@ build() {  # name exe envvar out seeds image-specs...
     local name="$1" exe="$2" envn="$3" out="$4" seeds="$5"; shift 5
     rm -rf builder/gen builder/obj builder/work; mkdir -p builder/gen builder/obj builder/work
     say "$name: arrancando el juego para leer su programa..." "$name: booting the game to read its program..."
-    env "$envn=builder/work" "./$exe" >/dev/null 2>&1 || true
+    local rc=0; env "$envn=builder/work" "./$exe" >/dev/null 2>&1 || rc=$?
+    [ $rc -eq 4 ] && fail "$name: falta la BIOS de Hikaru. Tu romset está partido: copia también hikaru.zip en 'roms'." "$name: the Hikaru BIOS is missing. Your romset is split: copy hikaru.zip to 'roms' too."
+    [ $rc -eq 5 ] && fail "$name: a pharrier.zip le faltan archivos del juego." "$name: pharrier.zip is missing game files."
     local args=(); for s in "$@"; do f="builder/work/${s#*:}"; f="${f%:*}"; [ -f "$f" ] || fail "$name: no se pudo leer el programa del juego." "$name: could not read the game program."; args+=(--image "${s%%:*}:$f:${s##*:}"); done
     say "$name: generando el código C..." "$name: generating the C code..."
     builder/tools/blockgen -o builder/gen -n 16 "${args[@]}" --seeds "builder/$seeds" || fail "$name: la generación ha fallado." "$name: generation failed."

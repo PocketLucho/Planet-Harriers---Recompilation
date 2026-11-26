@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <math.h>
 #include "hikaru.h"
 #include "gpu.h"
 #include "mie.h"
@@ -107,7 +108,7 @@ void emu_dump_regs(Cpu *c) {
 int emu_init(const EmuConfig *cfg) {
     C = *cfg;
     sh4_init_tables();
-    hikaru_init(&M, C.rom);
+    int r = hikaru_init(&M, C.rom); if (r) return r;
     M.log = C.logpath ? fopen(C.logpath, "w") : 0;
     for (int i = 0; i < 2; i++) sh4_reset(&M.cpu[i]);
     g_blk_ram[0] = M.ram[0]; g_blk_ram[1] = M.ram[1]; g_blk_ram_mask = 0x01ffffff; g_blk_log = M.log;
@@ -135,6 +136,37 @@ static int is_idle(Cpu *c, u32 p) {
     }
     if (p == 0x0c002030) return bus_r8(c, c->gbr) == 0 && !((Machine *)c->machine)->nmi_pending[1];  /* slave: BIOS mailbox poll */
     return 0;
+}
+
+/* Widescreen: the game culls models on the SH-4, before anything reaches the GPU: @0C039C20 builds four planes
+ * through the eye from the field of view of a 640-pixel window (eye space at 0C289214, the same in world space
+ * at 0C2891E4, 12 bytes each: left, right, bottom, top) and the tests @0C039DE0 / 0C039EA0 / 0C03A760... drop
+ * every bounding sphere or box outside them. With the picture widened to 16:9 that makes characters and scenery
+ * vanish while still on screen (character-select intro). When that function is done (0C039D7E: back from its last
+ * call) the left and right planes are opened to the edges of the wider picture. The window need not be centred
+ * (the intro projects around x = 520): with tl, tr the tangents of the two planes the window is tl + tr wide, and
+ * each side gains (1 / xscale - 1) / 2 of that. Both new normals lie in the plane of the old pair, so the same
+ * combination of the old world-space normals gives the new ones. Nothing is touched at 4:3. */
+extern float g_gfx_xscale;
+static void widen_frustum(Cpu *c) {
+    static u64 done_at = ~0ULL;
+    if (g_gfx_xscale >= 1.0f || g_gfx_xscale <= 0.0f || c->cycles == done_at) return;
+    { u32 lit; memcpy(&lit, &M.ram[0][0x039dcc], 4); if (lit != 0x0c289214) return; }          /* not this code: leave it alone */
+    float e[2][3], w[2][3]; memcpy(e, &M.ram[0][0x289214], sizeof e); memcpy(w, &M.ram[0][0x2891e4], sizeof w);
+    float det = e[0][0] * e[1][2] - e[0][2] * e[1][0];
+    if (!(e[0][0] > 1e-6f) || !(e[1][0] < -1e-6f) || fabsf(det) < 1e-6f) return;
+    float tl = -e[0][2] / e[0][0], tr = e[1][2] / e[1][0], grow = (1.0f / g_gfx_xscale - 1.0f) * 0.5f * (tl + tr);
+    if (!(tl + tr > 0)) return;
+    float ne[2][3], nw[2][3];
+    for (int i = 0; i < 2; i++) {
+        float t = (i ? tr : tl) + grow, x = i ? -1.0f : 1.0f, z = -t, l = 1.0f / sqrtf(1.0f + t * t);
+        x *= l; z *= l;
+        float a = (x * e[1][2] - z * e[1][0]) / det, b = (z * e[0][0] - x * e[0][2]) / det;   /* (x, z) = a e0 + b e1 */
+        ne[i][0] = x; ne[i][1] = 0; ne[i][2] = z;
+        for (int k = 0; k < 3; k++) nw[i][k] = a * w[0][k] + b * w[1][k];
+    }
+    memcpy(&M.ram[0][0x289214], ne, sizeof ne); memcpy(&M.ram[0][0x2891e4], nw, sizeof nw);
+    done_at = c->cycles;
 }
 
 static void hle_boot(Cpu *c) {
@@ -176,6 +208,7 @@ static int run_slice(void) {
                     fprintf(M.log, "[%llu] CPU%d enters page %08x (pc=%08x pr=%08x)\n", (unsigned long long)c->cycles, ci, pc & ~0xfffu, pc, c->pr); }
             }
             if (C.hleboot && !booted && ci == 0 && p == 0x0c0069fc) { hle_boot(c); continue; }
+            if (ci == 0 && p == 0x0c039d7e) widen_frustum(c);
             if (is_idle(c, p)) { g_idle_skipped[ci] += t_slice - c->cycles; c->cycles = t_slice; break; }
             if (C.exec_reset_at && c->cycles >= C.exec_reset_at && !exec_reset_done) { exec_reset_done = 1; memset(execmap, 0, sizeof execmap); }
             if (ci == C.stop_cpu && p == (C.stop_pc & 0x1fffffff) && c->cycles >= C.stop_after) { fprintf(stderr, "stop hit\n"); emu_dump_regs(c); return -1; }

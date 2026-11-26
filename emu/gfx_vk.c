@@ -21,11 +21,13 @@ static void vk_out(const CpState *cp, const uint8_t *texram, int *dirty, uint64_
     static const char *vklist = (const char *)-1; if (vklist == (const char *)-1) vklist = getenv("VKLIST");
     { static int fblog = -1; static uint32_t l1, l7; if (fblog < 0) fblog = getenv("FBLOG") != 0;
       if (fblog && (cp->fb181 != l1 || cp->fb781 != l7)) { l1 = cp->fb181; l7 = cp->fb781; fprintf(stderr, "FB frame %llu 181=%08x 781=%08x\n", (unsigned long long)frame, l1, l7); } }
+    /* set before any early return: the core also reads the aspect (emu_core.c widens the game's culling planes) */
+    g_gfx_xscale = vkr_is_wide() ? 0.75f : 1.0f;
+    g_gfx_clean_edges = vkr_pillarbox();
     int want = dump_every > 0 && (long)frame >= dump_from && frame % dump_every == 0;
     if (vklist) { char k[24], b[512]; snprintf(k, sizeof k, ",%llu,", (unsigned long long)frame); snprintf(b, sizeof b, ",%s,", vklist); want = strstr(b, k) != 0;
                   if (!want) return; }   /* test mode: only render the listed frames (TEXRAM stays dirty until then) */
     if (*dirty) { vkr_texram_upload(texram); *dirty = 0; }
-    g_gfx_xscale = vkr_is_wide() ? 0.75f : 1.0f;
     gfx_build(&gf, cp);
     { static u16 *lay; if (!lay) lay = malloc(640 * 960 * 2); uint32_t ena = (uint32_t)gpu_layers(lay), dir = (uint32_t)gpu_layers_direct();
       if (g_vk_layer_hook) g_vk_layer_hook(lay, &ena, &dir);

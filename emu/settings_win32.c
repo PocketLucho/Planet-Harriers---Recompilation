@@ -91,7 +91,7 @@ static const wchar_t *act_labels[ACT_N] = {
 };
 
 void settings_defaults(Settings *s) {
-    s->scale = 2; s->wide = 0; s->msaa = 1; s->fullscreen = 0; s->stick_speed = 5; s->pad_mode = 1; s->invert_y = 0; s->region = -1; s->lang = 0; s->launcher = 1;
+    s->scale = 2; s->wide = 0; s->pillarbox = 1; s->cull = 1; s->msaa = 1; s->fullscreen = 0; s->stick_speed = 5; s->pad_mode = 1; s->invert_y = 0; s->region = -1; s->lang = 0; s->launcher = 1;
     s->keys[ACT_UP] = VK_UP;     s->keys[ACT_DOWN] = VK_DOWN; s->keys[ACT_LEFT] = VK_LEFT; s->keys[ACT_RIGHT] = VK_RIGHT;
     s->keys[ACT_SHOT] = 'Z';     s->keys[ACT_MISSILE] = 'X';  s->keys[ACT_BOMB] = 'C';
     s->keys[ACT_VR_L] = 'A';     s->keys[ACT_VR_R] = 'S';
@@ -127,6 +127,8 @@ void settings_load(void) {
         if (sscanf(line, " %63[a-z_] = %d", key, &v) != 2) continue;
         if (!strcmp(key, "scale")) g_set.scale = v;
         else if (!strcmp(key, "widescreen")) g_set.wide = v != 0;
+        else if (!strcmp(key, "clean_edges")) g_set.pillarbox = v != 0;
+        else if (!strcmp(key, "backface_cull")) g_set.cull = v != 0;
         else if (!strcmp(key, "msaa")) g_set.msaa = v;
         else if (!strcmp(key, "fullscreen")) g_set.fullscreen = v != 0;
         else if (!strcmp(key, "stick_speed")) g_set.stick_speed = v;
@@ -146,9 +148,9 @@ void settings_load(void) {
 int settings_save(void) {
     wchar_t p[MAX_PATH]; ini_path(p, MAX_PATH);
     FILE *f = _wfopen(p, L"w"); if (!f) return -1;
-    fprintf(f, "; Planet Harriers Recomp - opciones (Esc / F10; teclas: F9)\n[video]\nscale = %d\nwidescreen = %d\nmsaa = %d\nfullscreen = %d\nlauncher = %d\n\n"
+    fprintf(f, "; Planet Harriers Recomp - opciones (Esc / F10; teclas: F9)\n[video]\nscale = %d\nwidescreen = %d\n; clean_edges (widescreen): 1 = black bars beside 4:3-only screens and full-width cutscene bars, 0 = stretched edges\nclean_edges = %d\n; backface_cull: 1 = the far side of solid polygons is not drawn (as on the board), 0 = both sides\nbackface_cull = %d\nmsaa = %d\nfullscreen = %d\nlauncher = %d\n\n"
                "[controles]\n; stick speed with keys 1..10; gamepad: 0 off, 1 on; invert_y: 1 = up/down swapped; language: 0 auto, 1 es, 2 en\nstick_speed = %d\ngamepad = %d\ninvert_y = %d\nlanguage = %d\n\n"
-               "[keys]\n; codigos de tecla virtual de Windows\n", g_set.scale, g_set.wide, g_set.msaa, g_set.fullscreen, g_set.launcher, g_set.stick_speed, g_set.pad_mode, g_set.invert_y, g_set.lang);
+               "[keys]\n; codigos de tecla virtual de Windows\n", g_set.scale, g_set.wide, g_set.pillarbox, g_set.cull, g_set.msaa, g_set.fullscreen, g_set.launcher, g_set.stick_speed, g_set.pad_mode, g_set.invert_y, g_set.lang);
     for (int i = 0; i < ACT_N; i++) fprintf(f, "%s = %d\n", g_act_names[i], g_set.keys[i]);
     return fclose(f) == 0 ? 0 : -1;
 }

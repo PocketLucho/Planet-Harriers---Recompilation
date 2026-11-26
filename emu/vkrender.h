@@ -29,6 +29,10 @@ void vkr_resize(int w, int h);                 /* window size changed */
 int  vkr_reconfigure(int scale, int wide, int msaa);   /* change internal resolution / aspect / MSAA at runtime */
 int  vkr_msaa(void);
 int  vkr_is_wide(void);
+/* widescreen "clean edges": black sides on full-screen 4:3 2D pictures instead of stretched edge columns, and
+ * cutscene letterbox bars to the 16:9 edges */
+void vkr_set_pillarbox(int on);
+int  vkr_pillarbox(void);
 void vkr_request_screenshot(void);             /* the next vkr_draw copies its image for vkr_take_screenshot */
 int  vkr_screenshot_ready(void);
 int  vkr_take_screenshot(uint8_t *rgba);       /* w*h*4 (vkr_size), returns 0 when an image was captured */

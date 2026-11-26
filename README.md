@@ -16,7 +16,8 @@ Support: https://buymeacoffee.com/pocket_lucho
 ## What you need
 
 * Your own MAME romset `pharrier.zip`, with the Hikaru BIOS inside (`epr-23400a.ic94`, or
-  `epr-23400.ic94` / `epr-21904.ic94`).
+  `epr-23400.ic94` / `epr-21904.ic94`). With a split set (BIOS in a separate `hikaru.zip`), put `hikaru.zip`
+  next to `pharrier.zip`.
 * 64-bit Windows 10/11 or Linux x86_64, with a Vulkan 1.1 driver.
 
 **This repository and its packages contain no game code, graphics, sound or BIOS.** The recompiled code is
@@ -24,7 +25,7 @@ generated on your PC from your ROM.
 
 ## How to use it
 
-1. Copy `pharrier.zip` to the `roms` folder.
+1. Copy `pharrier.zip` (and `hikaru.zip`, if your set is split) to the `roms` folder.
 2. Run `BUILD_GAME.bat` (Windows) or `./build_game.sh` (Linux) once. It boots the game without a window to
    read its program, translates it to C and compiles it into `ph_game.dll` / `libph_game.so`. On Windows it
    downloads the llvm-mingw compiler (180 MB) the first time.
@@ -46,9 +47,10 @@ from YOUR copy of the game: personal use only, do not distribute it.
 | Test / Service | F2 / F1 | |
 | Pause, options, fullscreen, screenshot, quit | P, F10, F11, F12, Esc | L3+R3 options (Linux) |
 
-Options: internal resolution 1x-8x, MSAA, 16:9 widescreen, fullscreen, country (Japan, USA, Export,
-Australia, Korea; Export by default, English text), stick speed with keys, invert up/down, interface
-language (Spanish / English).
+Options: internal resolution 1x-8x, MSAA, 16:9 widescreen (optional clean edges: black bars beside 4:3-only
+screens such as the title, full-width cutscene bars), back-face culling, fullscreen, country (Japan, USA,
+Export, Australia, Korea; Export by default, English text), stick speed with keys, invert up/down,
+interface language (Spanish / English).
 
 ## Status
 

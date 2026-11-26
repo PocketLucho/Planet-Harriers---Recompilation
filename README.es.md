@@ -16,7 +16,8 @@ Si quieres apoyarme: https://buymeacoffee.com/pocket_lucho
 ## Qué necesitas
 
 * Tu propio romset de MAME `pharrier.zip`, con la BIOS de Hikaru dentro (`epr-23400a.ic94`, o
-  `epr-23400.ic94` / `epr-21904.ic94`).
+  `epr-23400.ic94` / `epr-21904.ic94`). Con un romset partido (la BIOS en un `hikaru.zip` aparte), pon
+  `hikaru.zip` junto a `pharrier.zip`.
 * Windows 10/11 de 64 bits o Linux x86_64, con un driver Vulkan 1.1.
 
 **Este repositorio y sus paquetes no contienen código, gráficos, sonido ni BIOS del juego.** El código
@@ -24,7 +25,7 @@ recompilado se genera en tu PC a partir de tu ROM.
 
 ## Cómo se usa
 
-1. Copia `pharrier.zip` en la carpeta `roms`.
+1. Copia `pharrier.zip` (y `hikaru.zip`, si tu romset está partido) en la carpeta `roms`.
 2. Ejecuta una vez `CONSTRUIR_JUEGO.bat` (Windows) o `./build_game.sh` (Linux). Arranca el juego sin ventana
    para leer su programa, lo traduce a C y lo compila en `ph_game.dll` / `libph_game.so`. En Windows
    descarga el compilador llvm-mingw (180 MB) la primera vez.
@@ -46,9 +47,11 @@ sale de TU copia del juego: es para uso personal, no lo distribuyas.
 | Test / Service | F2 / F1 | |
 | Pausa, opciones, pantalla completa, captura, salir | P, F10, F11, F12, Esc | L3+R3 opciones (Linux) |
 
-Opciones: resolución interna 1x-8x, MSAA, panorámico 16:9, pantalla completa, país (Japón, EE. UU.,
-Exportación, Australia, Corea; por defecto Exportación, textos en inglés), velocidad de la palanca con
-teclas, invertir arriba/abajo, idioma de la interfaz (español / inglés).
+Opciones: resolución interna 1x-8x, MSAA, panorámico 16:9 (bordes limpios opcionales: bandas negras junto a
+las pantallas solo 4:3, como el título, y franjas de cine a todo lo ancho), ocultar caras traseras,
+pantalla completa, país (Japón, EE. UU., Exportación, Australia, Corea; por defecto Exportación, textos en
+inglés), velocidad de la palanca con teclas, invertir arriba/abajo, idioma de la interfaz (español /
+inglés).
 
 ## Estado
 

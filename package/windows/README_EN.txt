@@ -8,6 +8,7 @@ This package contains NO game code, graphics, sound or BIOS.
 Getting started
 ---------------
 1. Copy your MAME romset pharrier.zip (with the BIOS epr-23400a.ic94 inside) to the "roms" folder.
+   With a split set (BIOS in a separate hikaru.zip), copy hikaru.zip there too.
 2. Run BUILD_GAME.bat once. It downloads the llvm-mingw compiler (180 MB, first time only), reads
    the game program from your ROM, translates it to C and compiles it into ph_game.dll. It takes a
    few minutes. An internet connection is needed the first time.
@@ -20,8 +21,8 @@ Menus
 The launcher shows at start (Start game / Settings / Quit); it can be turned off in
 Settings > System. In game, Esc or F10 (or Back+Start / L3+R3 on the gamepad) open the pause menu:
 Game (resume, reset, screenshot, back to the launcher, quit), Video (internal resolution 1x-8x,
-MSAA, 16:9 widescreen, fullscreen), Controls (gamepad, key stick speed, invert up/down) and
-System (country, language, launcher at start).
+MSAA, 16:9 widescreen, clean widescreen edges, hide back faces, fullscreen), Controls (gamepad,
+key stick speed, invert up/down) and System (country, language, launcher at start).
 Gamepad: d-pad/stick to move, A accept, B back, LB/RB change tab. F9 opens the key bindings window.
 
 Default keys

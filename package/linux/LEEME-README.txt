@@ -2,7 +2,8 @@ PLANET HARRIERS - RECOMP (Linux x86_64 / SteamOS / Steam Deck, SDL2 + Vulkan)
 =============================================================================
 Pocket_lucho + Claude.  https://github.com/PocketLucho/Planet-Harriers---Recompilation  (GPL v2)
 
-ES  1. Copia tu romset de MAME pharrier.zip en la carpeta "roms".
+ES  1. Copia tu romset de MAME pharrier.zip en la carpeta "roms" (con la BIOS epr-23400a.ic94 dentro;
+       si tu romset está partido, copia también hikaru.zip).
     2. Ejecuta una vez ./build_game.sh (o abre "Construir juego - Build game"). Usa el compilador de C
        del sistema; si no hay (SteamOS) descarga Zig una sola vez (~50 MB) en builder/zig, sin root.
        Sin este paso el juego funciona con el intérprete (más lento).
@@ -18,7 +19,8 @@ ES  1. Copia tu romset de MAME pharrier.zip en la carpeta "roms".
       de Xbox (plantilla "Mando" / "Gamepad").
     - Menú: View+Menu (Select+Start) o L3+R3. Moneda: View (Select). Start: Menu.
 
-EN  1. Copy your MAME romset pharrier.zip to the "roms" folder.
+EN  1. Copy your MAME romset pharrier.zip to the "roms" folder (with the BIOS epr-23400a.ic94 inside;
+       with a split set, copy hikaru.zip too).
     2. Run ./build_game.sh once (or open "Construir juego - Build game"). It uses the system C compiler;
        without one (SteamOS) it downloads Zig once (~50 MB) into builder/zig, no root needed.
        Without this step the game runs on the interpreter (slower).
